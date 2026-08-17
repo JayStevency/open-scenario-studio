@@ -6,11 +6,37 @@
  */
 import type { Actor } from './trpc'
 
+/**
+ * 이력의 작성자로 걸 수 있는 사용자 ID.
+ *
+ * 사내 인증(NFR-06)이 붙기 전에는 헤더로 신원을 흉내 내므로, 그 값이
+ * 실제 사용자 행이 아닐 수 있다. 없는 사용자를 걸면 외래키 위반으로
+ * 저장 자체가 실패하니, 확인된 경우에만 건다 — 누가 고쳤는지는
+ * actorLabel 로 남는다.
+ */
+export async function resolveAuthorId(
+  tx: {
+    user: {
+      findUnique: (args: {
+        where: { id: string }
+        select: { id: true }
+      }) => Promise<{ id: string } | null>
+    }
+  },
+  actor: Actor,
+): Promise<string | null> {
+  if (actor.userId === null) return null
+  const found = await tx.user.findUnique({ where: { id: actor.userId }, select: { id: true } })
+  return found?.id ?? null
+}
+
 type Row = Record<string, unknown>
 
 export interface ChangeInput {
   projectId: string
   actor: Actor
+  /** resolveAuthorId 로 확인된 값. 없으면 사람 이름은 actorLabel 에만 남는다. */
+  authorId?: string | null
   entityType:
     | 'Scenario'
     | 'Rule'
@@ -38,8 +64,8 @@ export function changeLogData(input: ChangeInput) {
   return {
     projectId: input.projectId,
     actorType: input.actor.type,
-    actorLabel: input.actor.label,
-    authorId: input.actor.userId,
+    actorLabel: input.actor.label ?? input.actor.userId,
+    authorId: input.authorId ?? null,
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,

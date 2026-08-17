@@ -15,5 +15,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['./vitest.setup.ts'],
+    // 화면 테스트는 파일 상단의 @vitest-environment jsdom 으로 개별 지정한다.
   },
 })

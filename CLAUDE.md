@@ -49,7 +49,11 @@ apps/mcp              @oss/mcp — 에이전트가 붙는 MCP 서버 (stdio)
 
 apps/web              @oss/web — Vite 7 + React 19
   src/api/trpc.ts     tRPC 클라이언트 + react-query
+  src/api/project.ts  화면이 쓰는 질의·편집. 저장 상태와 충돌 처리를 여기서 다룬다
+  src/screens/        화면 하나에 파일 하나. 지금은 RuleSheet(FR-100) 뿐이다
+  src/components/     셀 편집기 등 공용 조각
   src/data/seed.ts    서버 없이 화면 만들 때 쓰는 오프라인 시드
+  vitest.setup.ts     jsdom 에 레이아웃을 흉내 낸다 — 없으면 가상 스크롤이 행을 안 그린다
 ```
 
 ## 에이전트가 이 도구를 쓰는 방식
@@ -109,6 +113,10 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
 
 ## 현재 상태
 
-앱 셸(FR-001, FR-002)과 데이터 적재·무결성 검사, 서버 골격(스키마·tRPC·낙관적 잠금·이력)까지 있다. 다섯 화면은 아직 비어 있고 `design/prototype.html`이 참조 구현이다.
+앱 셸(FR-001~003)과 **BR 시트(FR-100)** 가 동작한다. 화면이 DB 를 보고, 셀 편집이 낙관적 잠금을 거쳐 이력에 남는다.
+
+나머지 네 화면(FR-200 관계도 · FR-300 편성 보드 · FR-400 시나리오 상세 · FR-500 검사)은 비어 있고 `design/prototype.html` 이 참조 구현이다.
+
+화면을 만들 때는 `src/screens/RuleSheet.tsx` 를 본보기로 삼는다 — 질의는 `src/api/project.ts` 에 모으고, 편집은 version 을 실어 보내고, 실패는 헤더에 보여준다.
 
 미착수: 사내 인증 연동(NFR-06 — 지금은 `x-user-id` 헤더로 흉내), 되돌리기 UI(NFR-04), 엑셀 내보내기(FR-005), 관리자 목록 설정 화면(FR-107).

@@ -1,7 +1,7 @@
 import { checkIntegrity, type ProjectData } from '@oss/domain'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
-import { changeLogData, pickChanged } from './changelog'
+import { changeLogData, pickChanged, resolveAuthorId } from './changelog'
 import { assertUpdated, toTrpcError } from './concurrency'
 import type { Prisma } from './generated/prisma/client'
 import type { Db } from './prisma'
@@ -103,9 +103,67 @@ export const appRouter = router({
     integrity: publicProcedure.input(projectInput).query(async ({ ctx, input }) => {
       return checkIntegrity(await readProjectData(ctx.prisma, input.projectId))
     }),
+
+    /**
+     * 셀 편집에 쓸 선택 목록(FR-107).
+     * 관리자 설정 화면이 생기기 전까지는 지금 데이터에 실제로 쓰인 값을 모아 쓴다.
+     */
+    options: publicProcedure.input(projectInput).query(async ({ ctx, input }) => {
+      const [rules, scenarios, capabilities, saved] = await Promise.all([
+        ctx.prisma.rule.findMany({
+          where: { projectId: input.projectId },
+          select: { ruleType: true, owner: true, status: true },
+        }),
+        ctx.prisma.scenario.findMany({
+          where: { projectId: input.projectId },
+          select: { id: true, name: true },
+          orderBy: { id: 'asc' },
+        }),
+        ctx.prisma.capabilityGroup.findMany({
+          where: { projectId: input.projectId },
+          select: { id: true, name: true },
+          orderBy: { id: 'asc' },
+        }),
+        ctx.prisma.optionList.findMany({ where: { projectId: input.projectId } }),
+      ])
+
+      const savedFor = (kind: string) =>
+        asStringArray(saved.find((o) => o.kind === kind)?.values ?? [])
+
+      const collect = (values: (string | null)[], kind: string) => {
+        const fromAdmin = savedFor(kind)
+        if (fromAdmin.length > 0) return fromAdmin
+        return [...new Set(values.filter((v): v is string => v !== null && v !== ''))].sort()
+      }
+
+      return {
+        ruleType: collect(
+          rules.map((r) => r.ruleType),
+          'ruleType',
+        ),
+        owner: collect(
+          rules.map((r) => r.owner),
+          'owner',
+        ),
+        status: collect(
+          rules.map((r) => r.status),
+          'status',
+        ),
+        scenarios,
+        capabilities,
+      }
+    }),
   }),
 
   rule: router({
+    /** 표가 그리는 것. 도메인 타입과 달리 version 을 포함한다 — 편집에 필요하다. */
+    list: publicProcedure.input(projectInput).query(({ ctx, input }) =>
+      ctx.prisma.rule.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { orderIndex: 'asc' },
+      }),
+    ),
+
     /** 규칙 한 건. 에이전트가 고치기 전에 현재 값과 version 을 확인한다. */
     get: publicProcedure
       .input(projectInput.extend({ id: z.string() }))
@@ -172,6 +230,7 @@ export const appRouter = router({
               data: changeLogData({
                 projectId: input.projectId,
                 actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
                 entityType: 'Rule',
                 entityId: input.id,
                 action: 'update',
@@ -181,6 +240,156 @@ export const appRouter = router({
             })
 
             return { version: input.version + 1 }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    /**
+     * 규칙 추가·복제(FR-103). 복제는 원본 바로 아래에 초안으로 놓는다.
+     * ID 는 서버가 정한다 — 삭제한 ID 는 재사용하지 않는다(4절).
+     */
+    create: authedProcedure
+      .input(
+        projectInput.extend({
+          scenarioId: z.string(),
+          /** 주면 그 규칙을 복제한다. 없으면 빈 규칙을 만든다. */
+          copyOfId: z.string().optional(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const source =
+              input.copyOfId === undefined
+                ? null
+                : await tx.rule.findFirst({
+                    where: { id: input.copyOfId, projectId: input.projectId },
+                  })
+
+            const scenarioId = source?.scenarioId ?? input.scenarioId
+            const siblings = await tx.rule.findMany({
+              where: { projectId: input.projectId, scenarioId },
+              select: { id: true },
+            })
+
+            // SC-1.7 형태를 잇는다. 쓰인 적 있는 번호는 피한다.
+            const used = new Set(
+              (
+                await tx.changeLog.findMany({
+                  where: { projectId: input.projectId, entityType: 'Rule' },
+                  select: { entityId: true },
+                })
+              ).map((c) => c.entityId),
+            )
+            for (const s of siblings) used.add(s.id)
+
+            let next = siblings.length + 1
+            while (used.has(`${scenarioId}.${next}`)) next++
+            const id = `${scenarioId}.${next}`
+
+            const created = await tx.rule.create({
+              data: {
+                id,
+                projectId: input.projectId,
+                scenarioId,
+                statement: source?.statement ?? '',
+                ruleType: source?.ruleType ?? '',
+                owner: source?.owner ?? null,
+                capabilityId: source?.capabilityId ?? null,
+                // 복제본은 원본을 그대로 확정으로 두면 안 된다.
+                status: '초안',
+                orderIndex: (source?.orderIndex ?? siblings.length) + 1,
+              },
+            })
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'Rule',
+                entityId: id,
+                action: 'create',
+                before: null,
+                after: { scenarioId, copyOf: input.copyOfId ?? null },
+              }),
+            })
+
+            return created
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    /**
+     * 규칙 삭제(FR-108). 참조하는 LINK 와 근거 규칙 지정을 함께 정리하고,
+     * 무엇이 함께 지워졌는지 돌려준다 — 화면이 사용자에게 알려야 한다.
+     */
+    delete: authedProcedure
+      .input(projectInput.extend({ id: z.string(), version: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.rule.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+
+            const links = await tx.ruleLink.findMany({
+              where: {
+                projectId: input.projectId,
+                OR: [{ fromId: input.id }, { toId: input.id }],
+              },
+              select: { id: true },
+            })
+            const relations = await tx.scenarioRelation.findMany({
+              where: { projectId: input.projectId, basisRuleId: input.id },
+              select: { id: true },
+            })
+
+            // 복합 키라 DB 가 대신 풀어주지 않는다. 앱이 먼저 정리한다.
+            await tx.ruleLink.deleteMany({
+              where: { projectId: input.projectId, id: { in: links.map((l) => l.id) } },
+            })
+            await tx.scenarioRelation.updateMany({
+              where: { projectId: input.projectId, basisRuleId: input.id },
+              data: { basisRuleId: null },
+            })
+
+            const { count } = await tx.rule.deleteMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+            })
+            assertUpdated(count, 'Rule', input.id, input.version, before?.version ?? null)
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'Rule',
+                entityId: input.id,
+                action: 'delete',
+                before:
+                  before === null
+                    ? null
+                    : {
+                        scenarioId: before.scenarioId,
+                        statement: before.statement,
+                        ruleType: before.ruleType,
+                        owner: before.owner,
+                        capabilityId: before.capabilityId,
+                        status: before.status,
+                      },
+                after: null,
+              }),
+            })
+
+            return {
+              deletedLinkIds: links.map((l) => l.id),
+              clearedRelationIds: relations.map((r) => r.id),
+            }
           })
         } catch (error) {
           throw toTrpcError(error)
@@ -214,6 +423,7 @@ export const appRouter = router({
               data: changeLogData({
                 projectId: input.projectId,
                 actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
                 entityType: 'Rule',
                 entityId: input.id,
                 action: 'update',
@@ -293,6 +503,7 @@ export const appRouter = router({
               data: changeLogData({
                 projectId: input.projectId,
                 actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
                 entityType: 'RuleLink',
                 entityId: input.id,
                 action: 'create',
@@ -331,6 +542,7 @@ export const appRouter = router({
               data: changeLogData({
                 projectId: input.projectId,
                 actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
                 entityType: 'RuleLink',
                 entityId: input.id,
                 action: 'delete',
