@@ -1,25 +1,14 @@
-/**
- * design/data/*.tsv 를 DB 로 옮긴다. `pnpm --filter @oss/api db:seed`.
- * 파싱과 검사는 @oss/domain 것을 그대로 쓴다 — 웹과 같은 코드다.
- */
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { checkIntegrity, parseProjectData, TSV_FILENAMES, type TsvSources } from '@oss/domain'
+import { checkIntegrity, parseProjectData } from '@oss/domain'
+import { hasDesignData, readDesignData } from '@oss/domain/designData'
 import { prisma } from '../src/prisma'
 
 const PROJECT_ID = process.env.SEED_PROJECT_ID ?? 'proj-robotaxi'
 
-function readDesignData(): TsvSources {
-  const dir = new URL('../../../design/data/', import.meta.url)
-  const read = (name: string) => readFileSync(fileURLToPath(new URL(name, dir)), 'utf8')
-  return {
-    scenarios: read(TSV_FILENAMES.scenarios),
-    rules: read(TSV_FILENAMES.rules),
-    relations: read(TSV_FILENAMES.relations),
-    capabilities: read(TSV_FILENAMES.capabilities),
-    devScenarios: read(TSV_FILENAMES.devScenarios),
-    links: read(TSV_FILENAMES.links),
-  }
+if (!hasDesignData()) {
+  console.error(
+    'design/data/ 에 TSV 여섯 개가 없다. 저장소에 올리지 않는 파일이라 직접 넣어야 한다.',
+  )
+  process.exit(1)
 }
 
 const data = parseProjectData(readDesignData())

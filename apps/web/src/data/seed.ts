@@ -1,17 +1,36 @@
 /**
  * 서버 없이 화면을 만들 때 쓰는 시드 데이터.
- * design/data/*.tsv 를 빌드 시점에 문자열로 읽어 ProjectData 로 바꾼다.
- * 서버 연결이 붙으면 이 경로는 오프라인 개발용으로만 남는다.
+ *
+ * design/data/*.tsv 는 프로젝트마다 다른 실제 명세라 저장소에 올리지 않는다.
+ * 파일이 없으면 빈 데이터를 돌려준다 — 정적 import 를 쓰면 파일이 없을 때
+ * 빌드가 깨지므로 glob 으로 읽는다.
  */
+import { type ProjectData, parseProjectData, TSV_FILENAMES } from '@oss/domain'
 
-import { type ProjectData, parseProjectData } from '@oss/domain'
-import scenarios from '../../../../design/data/01_SC_scenarios.tsv?raw'
-import rules from '../../../../design/data/02_BR_rules.tsv?raw'
-import relations from '../../../../design/data/03_REL_scenario_relations.tsv?raw'
-import capabilities from '../../../../design/data/04_CAP_capability_groups.tsv?raw'
-import devScenarios from '../../../../design/data/05_DEV_dev_scenarios.tsv?raw'
-import links from '../../../../design/data/06_LINK_br_relations.tsv?raw'
+const files = import.meta.glob('../../../../design/data/*.tsv', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
 
+function read(filename: string): string {
+  const entry = Object.entries(files).find(([path]) => path.endsWith(`/${filename}`))
+  return entry?.[1] ?? ''
+}
+
+/** design/data 가 있으면 그 내용을, 없으면 빈 데이터를 돌려준다. */
 export function loadSeedData(): ProjectData {
-  return parseProjectData({ scenarios, rules, relations, capabilities, devScenarios, links })
+  return parseProjectData({
+    scenarios: read(TSV_FILENAMES.scenarios),
+    rules: read(TSV_FILENAMES.rules),
+    relations: read(TSV_FILENAMES.relations),
+    capabilities: read(TSV_FILENAMES.capabilities),
+    devScenarios: read(TSV_FILENAMES.devScenarios),
+    links: read(TSV_FILENAMES.links),
+  })
+}
+
+/** 시드 파일이 있는지. 화면이 "데이터를 넣어라"를 안내할 때 쓴다. */
+export function hasSeedData(): boolean {
+  return read(TSV_FILENAMES.rules) !== ''
 }
