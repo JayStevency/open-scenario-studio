@@ -5,6 +5,7 @@
 // 모든 편집 대상 엔티티는 version 을 갖는다 — 갱신 시 버전이 어긋나면 409 로 막는다(NFR-03).
 
 // Prisma 7: 접속 URL 은 prisma.config.ts 로, 런타임 연결은 드라이버 어댑터로 넘어갔다.
+// 생성물은 저장소에 올리지 않는다. pnpm install 의 postinstall 이 만든다.
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"

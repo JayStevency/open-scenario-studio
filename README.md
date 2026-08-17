@@ -1,83 +1,126 @@
-# 시나리오 스튜디오 (open-scenario-studio)
+# 시나리오 스튜디오
 
-시나리오(SC)와 동작 규칙(BR)을 앱 안에서 직접 관리하고, 규칙 사이의 관계를 명시하고, 정합성 문제를 자동으로 찾아내는 웹 애플리케이션. 엑셀 시트를 원본에서 내려놓고 앱을 원본으로 삼는 것이 목표다.
+시나리오와 동작 규칙을 앱 안에서 직접 관리하고, 규칙 사이의 관계를 명시하고, 명세가 덜 여문 곳을 자동으로 찾아내는 도구다. AI 에이전트가 MCP 로 붙어 명세를 함께 만든다.
 
-요구사항은 [`design/REQUIREMENTS.md`](design/REQUIREMENTS.md)에 있다.
+엑셀 시트를 원본에서 내려놓고 앱을 원본으로 삼는 것이 목표다.
 
-## 시작하기
+---
+
+## 필요한 것
+
+| | 버전 | 확인 |
+|---|---|---|
+| Node.js | 22 이상 | `node -v` |
+| pnpm | 10 이상 | `pnpm -v` |
+
+pnpm 이 없으면 `corepack enable pnpm` 으로 켠다. DB 는 SQLite 파일이라 따로 설치할 게 없다.
+
+## 5분 안에 띄우기
 
 ```bash
+git clone https://github.com/JayStevency/open-scenario-studio.git
+cd open-scenario-studio
+
 pnpm install
-pnpm db:migrate      # SQLite 파일 생성 + 스키마 적용
-pnpm db:seed:sample  # 예제 데이터 적재 (samples/order-flow)
-pnpm dev             # web http://localhost:5173 · api http://localhost:3000
+pnpm db:migrate       # data/scenario-studio.db 를 만든다
+pnpm db:seed:sample   # 예제 데이터를 넣는다 (규칙 28건)
+pnpm dev              # 웹과 API 를 함께 띄운다
 ```
 
-자기 데이터를 쓰려면 `design/data/` 에 TSV 여섯 개를 넣고 `pnpm db:seed` 를 돌린다. 형식은 [`samples/README.md`](samples/README.md) 참고.
+브라우저에서 **http://localhost:5173** 을 연다. 규칙 28건이 표로 뜨면 성공이다.
 
-에이전트를 붙이려면:
+`pnpm dev` 는 두 프로세스를 함께 띄운다.
+
+- 웹 `http://localhost:5173`
+- API `http://localhost:3000`
+
+## 화면 다섯 개
+
+| 탭 | 하는 일 |
+|---|---|
+| **BR 시트** | 규칙을 표로 놓고 셀을 바로 고친다. 검색·필터, 추가·복제·삭제 |
+| **관계도 편집** | 시나리오를 노드로 그린다. 끌어 옮기면 위치가 저장되고, 이으면 관계가 생긴다 |
+| **CAP · DEV 편성** | 규칙을 칩으로 끌어 기능 그룹에 배정한다. 여기서 나눈 단위가 개발 작업 단위가 된다 |
+| **시나리오 상세** | 규칙 사이의 관계를 만들고 해제한다. 변경 이력과 메모를 함께 본다 |
+| **검사** | 명세가 덜 여문 곳 8종을 찾는다. 데이터를 고치면 즉시 다시 센다 |
+
+헤더의 **엑셀 내보내기** 로 전체를 시트별로 나눠 받는다.
+
+## 내 데이터 넣기
+
+예제 대신 자기 데이터를 쓰려면 TSV 여섯 개를 `design/data/` 에 넣고 시드한다.
+
+```bash
+mkdir -p design/data
+cp /어딘가/*.tsv design/data/
+pnpm db:seed
+```
+
+파일 이름과 열 구성은 [`samples/README.md`](samples/README.md) 를 따른다. 탭 구분, UTF-8 BOM 이라 엑셀에서 바로 열린다.
+
+`design/data/` 는 저장소에 올리지 않는다 — 프로젝트마다 다른 내용이기 때문이다. 없어도 빌드와 테스트는 통과한다.
+
+## 에이전트 붙이기
+
+에이전트는 명세를 **읽는 쪽이 아니라 만드는 쪽**이다. 규칙 문장을 다듬고, 규칙 사이의 관계를 찾아내고, 기능 그룹 편성을 제안한다.
 
 ```bash
 claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
-pnpm mcp:smoke    # 도구가 실제 DB 에 대고 도는지 점검
+pnpm mcp:smoke    # 도구가 DB 에 제대로 붙는지 점검
 ```
 
-DB 없이 화면만 만들려면 `pnpm dev:web` 으로 충분하다. `apps/web/src/data/seed.ts` 가 TSV 를 직접 읽는다.
+도구는 여덟 개다. 읽기는 `get_project` · `get_rule` · `list_rule_links` · `check_integrity`, 쓰기는 `update_rule` · `assign_rule_to_capability` · `create_rule_link` · `delete_rule_link`.
 
-데이터는 저장소 안 `data/scenario-studio.db` 에 쌓인다(git 에는 올리지 않는다). 다른 위치를 쓰려면 `apps/api/env.example` 을 참고해 `.env` 를 만든다.
-
-**실제 시나리오 데이터(`design/data/`)는 저장소에 올리지 않는다.** 프로젝트마다 다른 내부 명세이기 때문이다. 없어도 빌드와 테스트는 통과한다.
+쓰기는 모두 건 단위이고 `version` 을 요구한다. 사람이 화면에서 같은 데이터를 고치고 있으면 거절하고 다시 읽게 한다. 에이전트가 고친 것은 이력에 따로 표시되고, **잘못 고쳤으면 시나리오 상세의 이력에서 되돌릴 수 있다.**
 
 ## 명령
 
-| 명령 | 설명 |
+| 명령 | 하는 일 |
 |---|---|
-| `pnpm dev` | web + api 동시 기동 |
-| `pnpm dev:web` / `pnpm dev:api` | 하나만 기동 |
-| `pnpm test` | 전 패키지 테스트 |
-| `pnpm typecheck` | 전 패키지 타입 검사 |
-| `pnpm build` | 전 패키지 빌드 |
-| `pnpm check:fix` | biome 포맷·린트 자동 수정 |
-| `pnpm db:migrate` | 마이그레이션 |
-| `pnpm db:seed` / `db:seed:sample` | 내 데이터 · 예제 데이터 적재 |
+| `pnpm dev` | 웹 + API 함께 |
+| `pnpm dev:web` / `pnpm dev:api` | 하나만 |
+| `pnpm db:migrate` | DB 파일 생성과 스키마 적용 |
+| `pnpm db:seed` / `pnpm db:seed:sample` | 내 데이터 / 예제 데이터 |
 | `pnpm db:reset` | DB 를 비우고 다시 만든다 |
 | `pnpm mcp:smoke` | MCP 도구 점검 |
+| `pnpm test` | 테스트 |
+| `pnpm typecheck` | 타입 검사 |
+| `pnpm build` | 프로덕션 빌드 |
+| `pnpm check:fix` | 포맷·린트 자동 수정 |
+
+## 막혔을 때
+
+**브라우저가 연결하지 못한다** — 5173 이나 3000 을 다른 프로그램이 쓰고 있는지 본다. `lsof -nP -iTCP:5173 -sTCP:LISTEN`
+
+**화면이 비어 있다** — 데이터를 안 넣었다. `pnpm db:seed:sample`
+
+**`DATABASE_URL` 관련 오류** — 기본값은 저장소 안 `data/scenario-studio.db` 다. 다른 위치를 쓰려면 [`apps/api/env.example`](apps/api/env.example) 을 `apps/api/.env` 로 복사한다.
+
+**스키마를 고친 뒤 타입이 안 맞는다** — `pnpm --filter @oss/api db:generate`
 
 ## 구성
 
 ```
-packages/domain   공용 도메인 — 타입, TSV 파서, 참조 무결성 검사
+packages/domain   공용 도메인 — 타입, TSV 파서, 무결성 검사, 정합성 검사
 apps/api          Fastify 5 · tRPC 11 · Prisma 7 · SQLite
-apps/mcp          MCP 서버 — 에이전트가 BR 과 관계를 편집하는 통로
+apps/mcp          MCP 서버 — 에이전트가 붙는 통로
 apps/web          Vite 7 · React 19 · TanStack Table/Query · React Flow · dnd-kit
-design/           요구사항 · 와이어프레임 · 동작 프로토타입
-samples/          예제 데이터 — 바로 돌려볼 수 있다
+samples/          예제 데이터
+design/           요구사항 명세와 동작 프로토타입
 ```
 
-에이전트는 명세를 읽는 쪽이 아니라 **만드는 쪽**이다. BR 문장을 다듬고, BR 간 관계를 찾아내고, 기능 그룹 편성을 제안한다. 모든 쓰기는 건 단위이고 `version` 을 요구하며, 변경 전 값과 함께 이력에 남는다.
+요구사항은 [`design/REQUIREMENTS.md`](design/REQUIREMENTS.md), 설계 판단의 근거는 [`CLAUDE.md`](CLAUDE.md) 에 있다.
 
-설계 판단의 근거는 [`CLAUDE.md`](CLAUDE.md)의 "스택 선택 이유"에 적어두었다.
+## 아직 없는 것
 
-## 알려진 제약
+- 사용자 인증 — 지금은 `x-user-id` 헤더로 신원을 흉내 낸다
+- 유형·담당 주체 선택 목록의 관리자 설정 — 지금은 데이터에 쓰인 값을 모아 쓴다
+- 시나리오 자체의 추가·삭제
+- 엑셀 가져오기 — 앱이 원본이라는 전제라 범위 밖이다
+- 되돌리기는 수정 전체와 규칙 간 관계의 생성·삭제까지다
 
-- 남은 것은 사내 인증(NFR-06), 관리자 목록 설정(FR-107), 시나리오 추가·삭제(FR-206).
-- 되돌리기는 수정 전체와 BR 간 관계의 생성·삭제를 다룬다. 규칙·시나리오의 생성·삭제 되돌리기는 아직 없다.
-- 드래그 동작(관계도 노드 이동, 편성 보드 칩 옮기기)은 브라우저에서 직접 확인해야 한다. jsdom 테스트는 그 아래 로직까지만 본다. 나머지는 `design/prototype.html` 이 참조 구현이다.
-- 사내 인증(NFR-06)이 없다. `x-user-id` 헤더로 신원을 흉내 내며, 실제 사용자 행이 없으면 이력에 이름만 남는다.
+드래그가 들어가는 두 화면(관계도 노드 이동, 편성 보드 칩 옮기기)은 브라우저에서 직접 확인해야 한다.
 
-## 진행 상황
+## 라이선스
 
-- [x] 데이터 모델 타입 (SC · BR · REL · LINK · CAP · DEV)
-- [x] TSV 적재와 참조 무결성 검사
-- [x] 앱 셸 — 헤더 건수(FR-001), 탭 자리(FR-002)
-- [x] DB 스키마 — 버전 컬럼(NFR-03), append-only 변경 이력(FR-406), 프로젝트별 권한
-- [x] tRPC 라우터 골격 + 낙관적 잠금 패턴
-- [x] MCP 서버 — 읽기 4종 · 쓰기 4종, 에이전트 이력 구분
-- [x] FR-100 BR 시트 — 표 · 인라인 편집 · 검색/필터 · 추가/복제/삭제 · 경고색
-- [x] FR-200 관계도 편집 — 노드 드래그·위치 저장, 관계 생성/수정/삭제, 조건 없는 관계 경고
-- [x] FR-300 CAP · DEV 편성 보드 — 드래그로 배정, 공통 모듈 후보 강조, 미배정 모아보기
-- [x] FR-400 시나리오 상세 · BR 간 관계 — 관계 생성/해제, 변경 이력과 메모
-- [x] FR-500 정합성 검사 — 검사 8종, 경고/정보 구분, 6건 초과 접기
-- [x] FR-005 엑셀 내보내기 — 6개 시트로 분리, 머리글 고정과 자동 필터
-- [ ] 사내 인증 연동 (NFR-06) — 지금은 `x-user-id` 헤더로 흉내 낸다
-- [x] 되돌리기 (NFR-04) — 이력의 이전 값을 근거로 한 건씩. 되돌린 것도 기록에 남는다
+MIT
