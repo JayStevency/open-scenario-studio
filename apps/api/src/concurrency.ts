@@ -37,6 +37,9 @@ export function assertUpdated(
 
 /** 도메인 오류를 tRPC 오류로. 클라이언트는 CONFLICT 를 보고 사용자에게 알린다. */
 export function toTrpcError(error: unknown): TRPCError {
+  // 프로시저가 이미 의도를 담아 던진 오류는 그대로 내보낸다.
+  if (error instanceof TRPCError) return error
+
   if (error instanceof VersionConflictError) {
     return new TRPCError({ code: 'CONFLICT', message: error.message, cause: error })
   }

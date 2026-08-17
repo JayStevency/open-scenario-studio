@@ -12,10 +12,10 @@
     "typecheck": "pnpm -r typecheck",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @oss/api db:migrate",
-    "db:seed": "pnpm --filter @oss/api db:seed"
+    "db:seed": "pnpm --filter @oss/api db:seed",
+    "db:reset": "pnpm --filter @oss/api db:reset",
+    "mcp:smoke": "pnpm --filter @oss/mcp smoke"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

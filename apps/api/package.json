@@ -4,23 +4,24 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./router": "./src/router.ts"
+    "./router": "./src/router.ts",
+    "./trpc": "./src/trpc.ts"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:up": "docker compose -f ../../docker-compose.yml up -d",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset --force"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@oss/domain": "workspace:*",
-    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.0",
     "@trpc/server": "^11.18.0",
     "dotenv": "^17.4.2",

@@ -10,8 +10,10 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
+// SQLite 를 쓴다. 데이터가 23KB 수준이고 편집자가 소수라 서버 DB 가 필요 없다.
+// 제약: 원시 타입 배열(String[])을 못 쓴다. enum 과 Json 은 쓸 수 있다.
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 /// 프로젝트 단위로 데이터를 분리한다(요구사항 3절).
@@ -60,10 +62,11 @@ model Membership {
 
 /// 유형·담당 주체·상태 선택 목록은 관리자가 프로젝트별로 설정한다(FR-107).
 model OptionList {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   projectId String
   kind      String // ruleType | owner | status | relationKind | linkKind | lifecycleStage
-  values    String[]
+  /// 선택 값 목록. SQLite 가 배열을 못 담아 JSON 문자열로 둔다.
+  values    Json   @default("[]")
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -183,9 +186,10 @@ model DevScenario {
   name               String
   description        String?
   owner              String?
-  prerequisiteDevIds String[]
+  /// 선행 개발 시나리오 ID 목록. SQLite 가 배열을 못 담아 JSON 문자열로 둔다.
+  prerequisiteDevIds Json    @default("[]")
   acceptanceCriteria String?
-  version            Int      @default(1)
+  version            Int     @default(1)
 
   project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   capabilities CapabilityGroup[]
@@ -193,17 +197,30 @@ model DevScenario {
   @@index([projectId])
 }
 
+/// 누가 고쳤는가. 에이전트가 명세를 직접 수정하므로 사람과 구분해서 남긴다.
+enum ActorType {
+  USER
+  AGENT
+}
+
 /// 변경 이력. append-only — 수정·삭제하지 않는다(FR-406, NFR-04).
 model ChangeLog {
-  id         BigInt   @id @default(autoincrement())
+  // SQLite 의 자동 증가는 INTEGER 기본키에만 붙는다. BigInt 로 두면 id 가 비어 들어간다.
+  id         Int       @id @default(autoincrement())
   projectId  String
-  at         DateTime @default(now())
+  at         DateTime  @default(now())
+  actorType  ActorType @default(USER)
+  /// 에이전트가 고친 경우 어느 에이전트인지. 사람이면 null.
+  actorLabel String?
   authorId   String?
   entityType String // Scenario | Rule | ScenarioRelation | RuleLink | CapabilityGroup | DevScenario
   entityId   String
   action     String // create | update | delete
-  /// immer 가 만든 patch. 되돌리기의 근거가 된다(NFR-04).
-  patch      Json
+  /// 바뀐 필드의 변경 전 값. create 면 null.
+  /// 되돌리기(NFR-04)는 이 값을 근거로 한다 — after 만으로는 원래 값을 알 수 없다.
+  before     Json?
+  /// 바뀐 필드의 변경 후 값. delete 면 null.
+  after      Json?
   /// 사용자가 남긴 메모(FR-407). 자동 기록과 한 줄기로 본다.
   note       String?
 
@@ -212,4 +229,5 @@ model ChangeLog {
 
   @@index([projectId, at])
   @@index([projectId, entityType, entityId])
+  @@index([projectId, actorType, at])
 }

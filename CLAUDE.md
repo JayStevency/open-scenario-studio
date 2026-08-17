@@ -6,10 +6,10 @@ SC · BR · CAP · DEV 프레임워크를 웹 앱으로 옮기는 프로젝트. 
 
 ```bash
 pnpm install
-pnpm db:up          # docker compose 로 Postgres 기동 (최초 1회, Docker 데몬 필요)
-pnpm db:migrate     # 마이그레이션
+pnpm db:migrate     # SQLite 파일 생성 + 마이그레이션 (data/scenario-studio.db)
 pnpm db:seed        # design/data/*.tsv → DB
 pnpm dev            # web(5173) + api(3000) 동시 기동
+pnpm mcp:smoke      # MCP 도구를 실제 DB 에 대고 한 바퀴 점검
 pnpm test           # 전 패키지 vitest
 pnpm typecheck      # 전 패키지 tsc --noEmit
 pnpm build          # 전 패키지 빌드
@@ -31,22 +31,41 @@ packages/domain       @oss/domain — 서버·클라이언트 공용, 프레임�
   tsv.ts, mappers.ts  TSV 파싱과 도메인 매핑
   integrity.ts        참조 무결성 검사
 
-apps/api              @oss/api — Fastify 5 + tRPC 11 + Prisma 7 + Postgres
+apps/api              @oss/api — Fastify 5 + tRPC 11 + Prisma 7 + SQLite
   prisma/schema.prisma  DB 스키마. 편집 대상 엔티티는 전부 version 을 갖는다
   prisma/seed.ts        TSV → DB 적재
   src/router.ts         tRPC 라우터
   src/concurrency.ts    낙관적 잠금 (NFR-03)
+  src/changelog.ts      변경 이력 적재 (FR-406). before 를 반드시 남긴다
   src/generated/        Prisma 생성물 — 커밋하지 않는다
+
+apps/mcp              @oss/mcp — 에이전트가 붙는 MCP 서버 (stdio)
+  src/tools.ts        도구 정의. 읽기 4종 + 쓰기 4종
+  src/caller.ts       tRPC 를 HTTP 없이 직접 호출 — 웹과 같은 경로를 탄다
+  scripts/smoke.mts   실제 DB 에 대고 도구를 한 바퀴 돌리는 점검
 
 apps/web              @oss/web — Vite 7 + React 19
   src/api/trpc.ts     tRPC 클라이언트 + react-query
   src/data/seed.ts    서버 없이 화면 만들 때 쓰는 오프라인 시드
 ```
 
+## 에이전트가 이 도구를 쓰는 방식
+
+에이전트는 명세를 **읽는 쪽이 아니라 만드는 쪽**이다. 주로 BR 문장을 다듬고, BR 간 관계(LINK)를 찾아내고, 기능 그룹 편성을 제안한다.
+
+```bash
+claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
+```
+
+- 쓰기는 전부 **건 단위**이고 `version` 을 요구한다. 사람이 화면에서 같은 데이터를 고치고 있을 수 있으므로, 어긋나면 거절하고 다시 읽게 한다
+- 에이전트의 변경은 이력에 `actorType=AGENT` 로 남는다. 나중에 "에이전트가 고친 것만" 걸러 볼 수 있다
+- 에이전트는 기존 문장을 덮어쓸 수 있다. 그래서 이력에 `before` 를 반드시 남긴다 — 원래 값이 거기 말고는 남는 곳이 없다
+
 ## 스택 선택 이유
 
 바꾸기 전에 이유를 먼저 읽어라.
 
+- **SQLite** — 전체 데이터가 23KB 다. 편집자는 소수이고 에이전트는 MCP 로 로컬에서 붙는다. 서버 DB 를 둘 이유가 없다. 제약은 원시 타입 배열을 못 쓴다는 것 하나뿐이고(enum·Json 은 된다), 해당 필드는 JSON 으로 담고 읽을 때 배열로 되돌린다.
 - **Vite + Fastify 분리, Next.js 아님** — 이 앱은 문서가 아니라 편집기다. SSR·SEO 가 필요 없고, React Flow·TanStack Table·dnd-kit 이 전부 클라이언트 전용이라 RSC 의 이점이 없다.
 - **zustand + immer** — immer 의 patch 를 그대로 이력(FR-406)과 되돌리기(NFR-04)에 쓴다. 편집 → patch → 로컬 적용 + 서버 전송 + 이력 적재가 한 경로다. 이력을 따로 만들면 반드시 어긋난다.
 - **tRPC** — 클라이언트가 사내 웹 하나뿐이라 OpenAPI 왕복이 불필요하다. 외부 연동이 생기면 REST 를 추가한다.

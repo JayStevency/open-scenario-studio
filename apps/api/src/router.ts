@@ -1,5 +1,7 @@
 import { checkIntegrity, type ProjectData } from '@oss/domain'
+import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
+import { changeLogData, pickChanged } from './changelog'
 import { assertUpdated, toTrpcError } from './concurrency'
 import type { Prisma } from './generated/prisma/client'
 import type { Db } from './prisma'
@@ -9,6 +11,11 @@ import { authedProcedure, publicProcedure, router } from './trpc'
 //        편집 단위와 응답 형태는 논의 결과에 따라 바뀐다. CLAUDE.md '잠정' 절 참고.
 
 const projectInput = z.object({ projectId: z.string() })
+
+/** SQLite 가 배열을 못 담아 JSON 으로 둔 필드를 도메인 쪽 배열로 되돌린다. */
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+}
 
 /** DB 행을 도메인 타입으로. 도메인은 Prisma 를 모른다. */
 async function readProjectData(prisma: Db, projectId: string): Promise<ProjectData> {
@@ -77,7 +84,7 @@ async function readProjectData(prisma: Db, projectId: string): Promise<ProjectDa
       description: d.description ?? '',
       owner: d.owner ?? '',
       capabilityIds: d.capabilities.map((c) => c.id),
-      prerequisiteDevIds: d.prerequisiteDevIds,
+      prerequisiteDevIds: asStringArray(d.prerequisiteDevIds),
       ...(d.acceptanceCriteria !== null && { acceptanceCriteria: d.acceptanceCriteria }),
     })),
   }
@@ -99,9 +106,23 @@ export const appRouter = router({
   }),
 
   rule: router({
+    /** 규칙 한 건. 에이전트가 고치기 전에 현재 값과 version 을 확인한다. */
+    get: publicProcedure
+      .input(projectInput.extend({ id: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const rule = await ctx.prisma.rule.findFirst({
+          where: { id: input.id, projectId: input.projectId },
+        })
+        if (rule === null) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: `규칙 ${input.id} 가 없다` })
+        }
+        return rule
+      }),
+
     /**
-     * 규칙 셀 편집(FR-102). 낙관적 잠금 + 이력 적재를 한 트랜잭션에 묶는다.
-     * 새 필드를 추가할 때 이 패턴을 그대로 복사해 쓴다.
+     * 규칙 편집(FR-102). 낙관적 잠금 + 이력 적재를 한 트랜잭션에 묶는다.
+     * 사람의 셀 편집과 에이전트의 문장 수정이 같은 경로를 탄다.
+     * 새 쓰기 프로시저는 이 패턴을 그대로 복사해 쓴다.
      */
     update: authedProcedure
       .input(
@@ -127,34 +148,206 @@ export const appRouter = router({
           // exactOptionalPropertyTypes 아래에서는 undefined 키를 남기면 안 된다.
           const patch = Object.fromEntries(
             Object.entries(input.patch).filter(([, value]) => value !== undefined),
-          ) as Prisma.RuleUncheckedUpdateManyInput
+          )
+          if (Object.keys(patch).length === 0) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: '바꿀 필드가 없다' })
+          }
 
           return await ctx.prisma.$transaction(async (tx) => {
-            const { count } = await tx.rule.updateMany({
-              where: { id: input.id, projectId: input.projectId, version: input.version },
-              data: { ...patch, version: { increment: 1 } },
+            // 되돌리기 근거를 남기려면 갱신 전에 읽어야 한다(NFR-04).
+            const before = await tx.rule.findFirst({
+              where: { id: input.id, projectId: input.projectId },
             })
 
-            if (count === 0) {
-              const current = await tx.rule.findUnique({
-                where: { id: input.id },
-                select: { version: true },
-              })
-              assertUpdated(count, 'Rule', input.id, input.version, current?.version ?? null)
-            }
+            const { count } = await tx.rule.updateMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+              data: {
+                ...(patch as Prisma.RuleUncheckedUpdateManyInput),
+                version: { increment: 1 },
+              },
+            })
+            assertUpdated(count, 'Rule', input.id, input.version, before?.version ?? null)
 
             await tx.changeLog.create({
-              data: {
+              data: changeLogData({
                 projectId: input.projectId,
-                authorId: ctx.userId,
+                actor: ctx.actor,
                 entityType: 'Rule',
                 entityId: input.id,
                 action: 'update',
-                patch: input.patch,
-              },
+                before: before === null ? null : pickChanged(before, patch),
+                after: patch,
+              }),
             })
 
             return { version: input.version + 1 }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    /** 규칙을 기능 그룹에 배정하거나 미배정으로 되돌린다(FR-302). */
+    assignCapability: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          version: z.number().int(),
+          capabilityId: z.string().nullable(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.rule.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+              select: { version: true, capabilityId: true },
+            })
+
+            const { count } = await tx.rule.updateMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+              data: { capabilityId: input.capabilityId, version: { increment: 1 } },
+            })
+            assertUpdated(count, 'Rule', input.id, input.version, before?.version ?? null)
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                entityType: 'Rule',
+                entityId: input.id,
+                action: 'update',
+                before: { capabilityId: before?.capabilityId ?? null },
+                after: { capabilityId: input.capabilityId },
+              }),
+            })
+
+            return { version: input.version + 1 }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+  }),
+
+  /** BR 간 관계(FR-400). 에이전트가 주로 만들어내는 데이터다. */
+  link: router({
+    /**
+     * 관계 목록. project.data 는 도메인 타입이라 version 이 빠지는데,
+     * 삭제하려면 version 이 필요하므로 원본 행을 그대로 돌려준다.
+     */
+    list: publicProcedure.input(projectInput).query(({ ctx, input }) =>
+      ctx.prisma.ruleLink.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { id: 'asc' },
+      }),
+    ),
+
+    create: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          fromRuleId: z.string(),
+          toRuleId: z.string(),
+          kind: z.string(),
+          note: z.string().default(''),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        // FR-405 자기 자신과는 연결하지 않는다. 사람은 잘 안 하지만 에이전트는 한다.
+        if (input.fromRuleId === input.toRuleId) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: '규칙을 자기 자신과 연결할 수 없다' })
+        }
+
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            // FR-405 같은 두 규칙 사이 같은 종류는 하나뿐이다.
+            const duplicate = await tx.ruleLink.findFirst({
+              where: {
+                projectId: input.projectId,
+                fromId: input.fromRuleId,
+                toId: input.toRuleId,
+                kind: input.kind,
+              },
+              select: { id: true },
+            })
+            if (duplicate !== null) {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message: `같은 종류의 관계가 이미 있다: ${duplicate.id}`,
+              })
+            }
+
+            const created = await tx.ruleLink.create({
+              data: {
+                id: input.id,
+                projectId: input.projectId,
+                fromId: input.fromRuleId,
+                toId: input.toRuleId,
+                kind: input.kind,
+                note: input.note,
+              },
+            })
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                entityType: 'RuleLink',
+                entityId: input.id,
+                action: 'create',
+                before: null,
+                after: {
+                  fromId: input.fromRuleId,
+                  toId: input.toRuleId,
+                  kind: input.kind,
+                  note: input.note,
+                },
+              }),
+            })
+
+            return created
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    delete: authedProcedure
+      .input(projectInput.extend({ id: z.string(), version: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.ruleLink.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+
+            const { count } = await tx.ruleLink.deleteMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+            })
+            assertUpdated(count, 'RuleLink', input.id, input.version, before?.version ?? null)
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                entityType: 'RuleLink',
+                entityId: input.id,
+                action: 'delete',
+                before:
+                  before === null
+                    ? null
+                    : {
+                        fromId: before.fromId,
+                        toId: before.toId,
+                        kind: before.kind,
+                        note: before.note,
+                      },
+                after: null,
+              }),
+            })
+
+            return { deleted: true }
           })
         } catch (error) {
           throw toTrpcError(error)

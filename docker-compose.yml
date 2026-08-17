@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: oss
       POSTGRES_DB: scenario_studio
     ports:
-      - '5432:5432'
+      # 5432 는 다른 프로젝트가 쓰는 일이 잦아 5433 으로 내보낸다.
+      - '5433:5432'
     volumes:
       - oss-db-data:/var/lib/postgresql/data
     healthcheck:
