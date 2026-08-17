@@ -19,4 +19,5 @@ await server.register(fastifyTRPCPlugin, {
 server.get('/healthz', () => ({ ok: true }))
 
 const port = Number(process.env.PORT ?? 3000)
-await server.listen({ port, host: '127.0.0.1' })
+// 127.0.0.1 로만 열면 IPv6 로 오는 요청을 받지 못한다. localhost 는 양쪽에 붙는다.
+await server.listen({ port, host: process.env.HOST ?? 'localhost' })
