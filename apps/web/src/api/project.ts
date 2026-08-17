@@ -26,6 +26,10 @@ export function useIntegrity() {
   return useQuery(trpc.project.integrity.queryOptions(input))
 }
 
+export function useChecks() {
+  return useQuery(trpc.project.checks.queryOptions(input))
+}
+
 /** 저장 상태를 헤더에 보여주기 위한 것(FR-004). */
 export type SaveState =
   | { kind: 'idle' }
@@ -54,6 +58,8 @@ export function useRuleEditing() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.rule.list.queryKey(input) }),
       queryClient.invalidateQueries({ queryKey: trpc.project.integrity.queryKey(input) }),
+      // FR-500 데이터가 바뀌면 검사는 즉시 다시 계산된다
+      queryClient.invalidateQueries({ queryKey: trpc.project.checks.queryKey(input) }),
       queryClient.invalidateQueries({ queryKey: trpc.project.options.queryKey(input) }),
     ])
   }, [queryClient])

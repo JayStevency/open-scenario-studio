@@ -1,4 +1,4 @@
-import { checkIntegrity, type ProjectData } from '@oss/domain'
+import { checkIntegrity, type ProjectData, runChecks } from '@oss/domain'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { changeLogData, pickChanged, resolveAuthorId } from './changelog'
@@ -102,6 +102,14 @@ export const appRouter = router({
     /** 참조 무결성 위반. 도메인 검사를 서버에서도 그대로 돌린다. */
     integrity: publicProcedure.input(projectInput).query(async ({ ctx, input }) => {
       return checkIntegrity(await readProjectData(ctx.prisma, input.projectId))
+    }),
+
+    /**
+     * FR-500 정합성 검사 8종. 데이터가 바뀌면 즉시 다시 계산한다 —
+     * 저장해 두지 않고 매번 도메인 함수를 돌린다.
+     */
+    checks: publicProcedure.input(projectInput).query(async ({ ctx, input }) => {
+      return runChecks(await readProjectData(ctx.prisma, input.projectId))
     }),
 
     /**

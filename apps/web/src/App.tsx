@@ -1,7 +1,9 @@
+import { warningCount } from '@oss/domain'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PROJECT_ID } from './api/project'
 import { queryClient, trpc } from './api/trpc'
+import { Checks } from './screens/Checks'
 import { RuleSheet } from './screens/RuleSheet'
 
 /** FR-002 다섯 화면. 아직 만들지 않은 것은 자리만 잡아 둔다. */
@@ -27,10 +29,11 @@ function Studio() {
   const [tab, setTab] = useState<TabId>('rules')
 
   const project = useQuery(trpc.project.data.queryOptions({ projectId: PROJECT_ID }))
-  const integrity = useQuery(trpc.project.integrity.queryOptions({ projectId: PROJECT_ID }))
+  const checks = useQuery(trpc.project.checks.queryOptions({ projectId: PROJECT_ID }))
 
   const data = project.data
-  const violations = integrity.data ?? []
+  // FR-003 미해결 지적 건수. 정보는 세지 않는다.
+  const warnings = checks.data === undefined ? 0 : warningCount(checks.data)
 
   return (
     <div className="app">
@@ -47,7 +50,7 @@ function Studio() {
 
       <nav className="tabs">
         {TABS.map((t) => {
-          const ready = t.id === 'rules'
+          const ready = t.id === 'rules' || t.id === 'checks'
           return (
             <button
               key={t.id}
@@ -59,9 +62,7 @@ function Studio() {
             >
               {t.label}
               {/* FR-003 검사 탭에 미해결 지적 건수 */}
-              {t.id === 'checks' && violations.length > 0 && (
-                <span className="badge">{violations.length}</span>
-              )}
+              {t.id === 'checks' && warnings > 0 && <span className="badge">{warnings}</span>}
             </button>
           )
         })}
@@ -70,6 +71,8 @@ function Studio() {
       <main className="main">
         {tab === 'rules' ? (
           <RuleSheet />
+        ) : tab === 'checks' ? (
+          <Checks />
         ) : (
           <p className="placeholder">
             이 화면은 아직 만들지 않았다. <code>design/prototype.html</code> 이 참조 구현이다.

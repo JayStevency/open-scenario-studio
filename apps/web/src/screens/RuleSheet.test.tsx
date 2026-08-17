@@ -69,6 +69,7 @@ vi.mock('../api/trpc', () => {
       project: {
         options: query('options', options),
         integrity: query('integrity', []),
+        checks: query('checks', []),
         data: query('data', null),
       },
     },

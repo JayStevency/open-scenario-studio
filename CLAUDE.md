@@ -32,7 +32,8 @@ samples/order-flow    예제 데이터. 공개 저장소에서 바로 돌려볼 
 packages/domain       @oss/domain — 서버·클라이언트 공용, 프레임워크 의존 없음
   types.ts            SC · BR · REL · LINK · CAP · DEV (REQUIREMENTS 4절)
   tsv.ts, mappers.ts  TSV 파싱과 도메인 매핑
-  integrity.ts        참조 무결성 검사
+  integrity.ts        참조 무결성 — "데이터가 깨졌는가"
+  checks.ts           FR-500 정합성 검사 8종 — "명세가 덜 여물었는가"
 
 apps/api              @oss/api — Fastify 5 + tRPC 11 + Prisma 7 + SQLite
   prisma/schema.prisma  DB 스키마. 편집 대상 엔티티는 전부 version 을 갖는다
@@ -109,13 +110,13 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
 | `apps/api/prisma/schema.prisma` | 요구사항 8절 미결 사항(엑셀 가져오기 · 승인 흐름)이 정해지면 바뀐다 |
 | `apps/api/src/router.ts` 의 `rule.update` | FR-102 구현의 첫 조각. 편집 단위·patch 형태가 화면 설계에 달렸다 |
 | `apps/api/src/router.ts` 의 `readProjectData` | 화면이 무엇을 필요로 하는지 정해지기 전에 쓴 매핑이다 |
-| `packages/domain/src/integrity.ts` 검사 11종 | 요구사항이 아니라 임의 판단으로 정한 목록이다. FR-500 의 검사 8종과는 별개다 |
+| `packages/domain/src/integrity.ts` 검사 11종 | 요구사항이 아니라 임의 판단으로 정한 목록이다. 명세가 정한 검사 8종은 `checks.ts` 에 따로 있다 |
 
 ## 현재 상태
 
-앱 셸(FR-001~003)과 **BR 시트(FR-100)** 가 동작한다. 화면이 DB 를 보고, 셀 편집이 낙관적 잠금을 거쳐 이력에 남는다.
+앱 셸(FR-001~003)과 **BR 시트(FR-100)**, **정합성 검사(FR-500)** 가 동작한다. 화면이 DB 를 보고, 셀 편집이 낙관적 잠금을 거쳐 이력에 남으며, 편집 즉시 검사가 다시 계산된다.
 
-나머지 네 화면(FR-200 관계도 · FR-300 편성 보드 · FR-400 시나리오 상세 · FR-500 검사)은 비어 있고 `design/prototype.html` 이 참조 구현이다.
+나머지 세 화면(FR-200 관계도 · FR-300 편성 보드 · FR-400 시나리오 상세)은 비어 있고 `design/prototype.html` 이 참조 구현이다.
 
 화면을 만들 때는 `src/screens/RuleSheet.tsx` 를 본보기로 삼는다 — 질의는 `src/api/project.ts` 에 모으고, 편집은 version 을 실어 보내고, 실패는 헤더에 보여준다.
 

@@ -1,3 +1,4 @@
+export * from './checks'
 export * from './integrity'
 export * from './mappers'
 export * from './tsv'
