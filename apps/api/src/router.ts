@@ -576,6 +576,427 @@ export const appRouter = router({
   }),
 
   /** 자동 기록과 사용자 메모를 시간순으로(FR-407). */
+
+  /** FR-200 관계도 편집이 쓰는 것. 시나리오와 관계를 한 번에. */
+  diagram: publicProcedure.input(projectInput).query(async ({ ctx, input }) => {
+    const [scenarios, relations, rules] = await Promise.all([
+      ctx.prisma.scenario.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { id: 'asc' },
+      }),
+      ctx.prisma.scenarioRelation.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { id: 'asc' },
+      }),
+      // FR-204 근거 규칙 선택지는 출발 시나리오의 규칙으로 한정한다.
+      ctx.prisma.rule.findMany({
+        where: { projectId: input.projectId },
+        select: { id: true, scenarioId: true, statement: true },
+        orderBy: { orderIndex: 'asc' },
+      }),
+    ])
+    return { scenarios, relations, rules }
+  }),
+
+  /** FR-202·206 노드 위치와 시나리오 편집. */
+  scenarioEdit: router({
+    /** 위치 저장은 자주 일어난다. 이력을 남기지 않는다 — 의미 있는 변경이 아니다. */
+    move: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          version: z.number().int(),
+          x: z.number(),
+          y: z.number(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const before = await ctx.prisma.scenario.findFirst({
+            where: { id: input.id, projectId: input.projectId },
+            select: { version: true },
+          })
+          const { count } = await ctx.prisma.scenario.updateMany({
+            where: { id: input.id, projectId: input.projectId, version: input.version },
+            data: { x: input.x, y: input.y, version: { increment: 1 } },
+          })
+          assertUpdated(count, 'Scenario', input.id, input.version, before?.version ?? null)
+          return { version: input.version + 1 }
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    update: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          version: z.number().int(),
+          patch: z
+            .object({ name: z.string(), displayName: z.string(), area: z.string() })
+            .partial(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const patch = Object.fromEntries(
+            Object.entries(input.patch).filter(([, v]) => v !== undefined),
+          )
+          if (Object.keys(patch).length === 0) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: '바꿀 필드가 없다' })
+          }
+
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.scenario.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+            const { count } = await tx.scenario.updateMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+              data: {
+                ...(patch as Prisma.ScenarioUncheckedUpdateManyInput),
+                version: { increment: 1 },
+              },
+            })
+            assertUpdated(count, 'Scenario', input.id, input.version, before?.version ?? null)
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'Scenario',
+                entityId: input.id,
+                action: 'update',
+                before: before === null ? null : pickChanged(before, patch),
+                after: patch,
+              }),
+            })
+            return { version: input.version + 1 }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+  }),
+
+  /** FR-203·204 시나리오 간 관계 편집. */
+  relation: router({
+    create: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          fromScenarioId: z.string(),
+          toScenarioId: z.string(),
+          kind: z.string(),
+          condition: z.string().default(''),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const created = await tx.scenarioRelation.create({
+              data: {
+                id: input.id,
+                projectId: input.projectId,
+                fromId: input.fromScenarioId,
+                toId: input.toScenarioId,
+                kind: input.kind,
+                condition: input.condition,
+              },
+            })
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'ScenarioRelation',
+                entityId: input.id,
+                action: 'create',
+                before: null,
+                after: { fromId: input.fromScenarioId, toId: input.toScenarioId, kind: input.kind },
+              }),
+            })
+            return created
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    update: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          version: z.number().int(),
+          patch: z
+            .object({
+              kind: z.string(),
+              condition: z.string(),
+              basisRuleId: z.string().nullable(),
+            })
+            .partial(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const patch = Object.fromEntries(
+            Object.entries(input.patch).filter(([, v]) => v !== undefined),
+          )
+          if (Object.keys(patch).length === 0) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: '바꿀 필드가 없다' })
+          }
+
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.scenarioRelation.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+            const { count } = await tx.scenarioRelation.updateMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+              data: {
+                ...(patch as Prisma.ScenarioRelationUncheckedUpdateManyInput),
+                version: { increment: 1 },
+              },
+            })
+            assertUpdated(
+              count,
+              'ScenarioRelation',
+              input.id,
+              input.version,
+              before?.version ?? null,
+            )
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'ScenarioRelation',
+                entityId: input.id,
+                action: 'update',
+                before: before === null ? null : pickChanged(before, patch),
+                after: patch,
+              }),
+            })
+            return { version: input.version + 1 }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    delete: authedProcedure
+      .input(projectInput.extend({ id: z.string(), version: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.scenarioRelation.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+            const { count } = await tx.scenarioRelation.deleteMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+            })
+            assertUpdated(
+              count,
+              'ScenarioRelation',
+              input.id,
+              input.version,
+              before?.version ?? null,
+            )
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'ScenarioRelation',
+                entityId: input.id,
+                action: 'delete',
+                before:
+                  before === null
+                    ? null
+                    : { fromId: before.fromId, toId: before.toId, kind: before.kind },
+                after: null,
+              }),
+            })
+            return { deleted: true }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+  }),
+
+  /** FR-303 기능 그룹 관리. 편성 보드에서 쓴다. */
+  capability: router({
+    create: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          devId: z.string(),
+          name: z.string().min(1),
+          description: z.string().default(''),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const created = await tx.capabilityGroup.create({
+              data: {
+                id: input.id,
+                projectId: input.projectId,
+                devId: input.devId,
+                name: input.name,
+                description: input.description,
+              },
+            })
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'CapabilityGroup',
+                entityId: input.id,
+                action: 'create',
+                before: null,
+                after: { devId: input.devId, name: input.name },
+              }),
+            })
+            return created
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    update: authedProcedure
+      .input(
+        projectInput.extend({
+          id: z.string(),
+          version: z.number().int(),
+          patch: z
+            .object({ name: z.string(), description: z.string(), devId: z.string() })
+            .partial(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const patch = Object.fromEntries(
+            Object.entries(input.patch).filter(([, v]) => v !== undefined),
+          )
+          if (Object.keys(patch).length === 0) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: '바꿀 필드가 없다' })
+          }
+
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.capabilityGroup.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+            const { count } = await tx.capabilityGroup.updateMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+              data: {
+                ...(patch as Prisma.CapabilityGroupUncheckedUpdateManyInput),
+                version: { increment: 1 },
+              },
+            })
+            assertUpdated(
+              count,
+              'CapabilityGroup',
+              input.id,
+              input.version,
+              before?.version ?? null,
+            )
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'CapabilityGroup',
+                entityId: input.id,
+                action: 'update',
+                before: before === null ? null : pickChanged(before, patch),
+                after: patch,
+              }),
+            })
+            return { version: input.version + 1 }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
+    /** 삭제하면 소속 규칙의 배정만 풀린다. 규칙 자체는 남는다(4절). */
+    delete: authedProcedure
+      .input(projectInput.extend({ id: z.string(), version: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const before = await tx.capabilityGroup.findFirst({
+              where: { id: input.id, projectId: input.projectId },
+            })
+
+            // 복합 키라 DB 가 대신 풀어주지 않는다. 앱이 먼저 정리한다.
+            const { count: unassigned } = await tx.rule.updateMany({
+              where: { projectId: input.projectId, capabilityId: input.id },
+              data: { capabilityId: null },
+            })
+
+            const { count } = await tx.capabilityGroup.deleteMany({
+              where: { id: input.id, projectId: input.projectId, version: input.version },
+            })
+            assertUpdated(
+              count,
+              'CapabilityGroup',
+              input.id,
+              input.version,
+              before?.version ?? null,
+            )
+
+            await tx.changeLog.create({
+              data: changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(tx, ctx.actor),
+                entityType: 'CapabilityGroup',
+                entityId: input.id,
+                action: 'delete',
+                before: before === null ? null : { devId: before.devId, name: before.name },
+                after: null,
+              }),
+            })
+
+            return { unassignedRuleCount: unassigned }
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+  }),
+
+  /** 편성 보드가 쓰는 것. 규칙까지 한 번에 딸려 온다. */
+  board: publicProcedure.input(projectInput).query(async ({ ctx, input }) => {
+    const [devScenarios, capabilities, rules, scenarios] = await Promise.all([
+      ctx.prisma.devScenario.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { id: 'asc' },
+      }),
+      ctx.prisma.capabilityGroup.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { id: 'asc' },
+      }),
+      ctx.prisma.rule.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { orderIndex: 'asc' },
+      }),
+      ctx.prisma.scenario.findMany({
+        where: { projectId: input.projectId },
+        select: { id: true, name: true },
+        orderBy: { id: 'asc' },
+      }),
+    ])
+    return { devScenarios, capabilities, rules, scenarios }
+  }),
+
   /** FR-401 시나리오 하나를 보는 데 필요한 것을 한 번에 모아 준다. */
   scenario: router({
     list: publicProcedure.input(projectInput).query(({ ctx, input }) =>

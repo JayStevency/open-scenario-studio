@@ -51,7 +51,8 @@ apps/mcp              @oss/mcp — 에이전트가 붙는 MCP 서버 (stdio)
 apps/web              @oss/web — Vite 7 + React 19
   src/api/trpc.ts     tRPC 클라이언트 + react-query
   src/api/project.ts  화면이 쓰는 질의·편집. 저장 상태와 충돌 처리를 여기서 다룬다
-  src/screens/        화면 하나에 파일 하나 — RuleSheet(FR-100) · ScenarioDetail(FR-400) · Checks(FR-500)
+  src/screens/        화면 하나에 파일 하나 — RuleSheet(FR-100) · Diagram(FR-200) ·
+                      Board(FR-300) · ScenarioDetail(FR-400) · Checks(FR-500)
   src/components/     셀 편집기 등 공용 조각
   src/data/seed.ts    서버 없이 화면 만들 때 쓰는 오프라인 시드
   vitest.setup.ts     jsdom 에 레이아웃을 흉내 낸다 — 없으면 가상 스크롤이 행을 안 그린다
@@ -114,9 +115,11 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
 
 ## 현재 상태
 
-앱 셸(FR-001~003)과 **BR 시트(FR-100)**, **시나리오 상세(FR-400)**, **정합성 검사(FR-500)** 가 동작한다. 화면이 DB 를 보고, 편집이 낙관적 잠금을 거쳐 이력에 남으며, 편집 즉시 검사가 다시 계산된다. 에이전트가 MCP 로 만든 BR 간 관계를 시나리오 상세에서 사람이 보고 해제할 수 있다.
+**다섯 화면이 모두 동작한다.** 화면이 DB 를 보고, 편집이 낙관적 잠금을 거쳐 이력에 남으며, 편집 즉시 검사가 다시 계산된다. 에이전트가 MCP 로 만든 BR 간 관계를 사람이 보고 고칠 수 있다.
 
-나머지 두 화면(FR-200 관계도 · FR-300 편성 보드)은 비어 있고 `design/prototype.html` 이 참조 구현이다.
+미착수: 엑셀 내보내기(FR-005), 되돌리기(NFR-04), 사내 인증(NFR-06), 관리자 목록 설정(FR-107), 시나리오 추가·삭제(FR-206).
+
+드래그가 들어가는 두 화면(관계도 노드 이동, 편성 보드 칩 옮기기)은 jsdom 으로는 그 아래 로직까지만 검증된다. 고쳤으면 브라우저에서 직접 확인해라.
 
 tRPC 추론 타입이 깊어져 `TS2589` 가 나면, 화면이 쓰는 만큼만 인터페이스로 적어 끊는다(`ScenarioDetail.tsx` 의 `HistoryEntry` 참고).
 

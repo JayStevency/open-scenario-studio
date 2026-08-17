@@ -3,7 +3,9 @@ import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PROJECT_ID } from './api/project'
 import { queryClient, trpc } from './api/trpc'
+import { Board } from './screens/Board'
 import { Checks } from './screens/Checks'
+import { Diagram } from './screens/Diagram'
 import { RuleSheet } from './screens/RuleSheet'
 import { ScenarioDetail } from './screens/ScenarioDetail'
 
@@ -51,7 +53,7 @@ function Studio() {
 
       <nav className="tabs">
         {TABS.map((t) => {
-          const ready = t.id === 'rules' || t.id === 'checks' || t.id === 'scenario'
+          const ready = true
           return (
             <button
               key={t.id}
@@ -76,10 +78,10 @@ function Studio() {
           <Checks />
         ) : tab === 'scenario' ? (
           <ScenarioDetail />
+        ) : tab === 'board' ? (
+          <Board />
         ) : (
-          <p className="placeholder">
-            이 화면은 아직 만들지 않았다. <code>design/prototype.html</code> 이 참조 구현이다.
-          </p>
+          <Diagram />
         )}
       </main>
     </div>

@@ -664,3 +664,288 @@ button.primary:disabled {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* ── CAP · DEV 편성 보드 (FR-300) ────────────────────────────── */
+
+.board {
+  height: calc(100vh - 108px);
+  overflow: auto;
+  padding: 16px 24px;
+}
+
+.unassigned {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px dashed #fcd34d;
+  border-radius: 6px;
+  background: #fffbeb;
+}
+
+.unassigned.over,
+.cap-card.over {
+  border-color: var(--accent);
+  background: #eef2ff;
+}
+
+.unassigned h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+.board-columns {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.dev-column {
+  flex: 1 1 0;
+  min-width: 240px;
+}
+
+.dev-column header h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.dev-meta {
+  margin: 2px 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cap-card {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.cap-card.shared {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.cap-card header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.cap-id {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cap-name {
+  font-weight: 600;
+}
+
+.cap-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cap-desc {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cap-spread {
+  margin: 6px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cap-spread strong {
+  color: var(--accent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.chip:hover {
+  border-color: var(--muted);
+}
+
+.chip.dragging {
+  z-index: 10;
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  cursor: grabbing;
+}
+
+.chip-id {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip-text {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 관계도 편집 (FR-200) ────────────────────────────────────── */
+
+.diagram {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  height: calc(100vh - 108px);
+}
+
+.canvas {
+  position: relative;
+  border-right: 1px solid var(--line);
+}
+
+.diagram-error {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 5;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+}
+
+.diagram-side {
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.diagram-side .panel {
+  margin-top: 0;
+}
+
+.diagram-side .panel + .panel {
+  margin-top: 18px;
+}
+
+.relation-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.relation-list li + li {
+  border-top: 1px solid #f3f4f6;
+}
+
+.relation-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.relation-list button:hover {
+  background: #fafafa;
+}
+
+.relation-list button.active {
+  border-left-color: var(--accent);
+  background: #f5f6ff;
+}
+
+.rel-flow {
+  font-weight: 600;
+}
+
+.rel-kind {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rel-cond {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rel-cond.blank {
+  color: var(--warn);
+}
+
+.relation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.relation-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.relation-form input,
+.relation-form select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.relation-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.relation-actions button:not(.primary) {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
