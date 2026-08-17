@@ -2,7 +2,7 @@ import { checkIntegrity, parseProjectData } from '@oss/domain'
 import { hasDesignData, readDesignData } from '@oss/domain/designData'
 import { prisma } from '../src/prisma'
 
-const PROJECT_ID = process.env.SEED_PROJECT_ID ?? 'proj-robotaxi'
+const PROJECT_ID = process.env.SEED_PROJECT_ID ?? 'default'
 
 if (!hasDesignData()) {
   console.error(
@@ -23,7 +23,7 @@ if (violations.length > 0) {
 await prisma.project.upsert({
   where: { id: PROJECT_ID },
   update: {},
-  create: { id: PROJECT_ID, name: '로보택시' },
+  create: { id: PROJECT_ID, name: process.env.SEED_PROJECT_NAME ?? '기본 프로젝트' },
 })
 
 // 외래키 순서: DEV → CAP → SC → BR → REL → LINK

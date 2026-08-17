@@ -39,23 +39,36 @@ async function call(name: string, args: Record<string, unknown> = {}) {
 const project = JSON.parse((await call('get_project')).text)
 report(
   'get_project',
-  project.rules.length === 96 && project.scenarios.length === 13,
+  project.rules.length > 0 && project.scenarios.length > 0,
   `SC ${project.scenarios.length} · BR ${project.rules.length} · LINK ${project.links.length}`,
 )
 
-const original = JSON.parse((await call('get_rule', { id: 'SC-1.5' })).text)
+// 데이터셋마다 ID 가 다르므로 읽어온 것에서 고른다.
+// 아직 관계로 이어지지 않은 두 규칙을 써야 중복 판정에 걸리지 않는다.
+const linked = new Set(
+  project.links.flatMap((l: { fromRuleId: string; toRuleId: string }) => [
+    `${l.fromRuleId}->${l.toRuleId}`,
+  ]),
+)
+const pair = project.rules
+  .flatMap((a: { id: string }) => project.rules.map((b: { id: string }) => [a.id, b.id]))
+  .find(([a, b]: [string, string]) => a !== b && !linked.has(`${a}->${b}`))
+if (pair === undefined) throw new Error('쓸 만한 규칙 쌍이 없다 — 데이터를 먼저 시드해라')
+const [ruleA, ruleB] = pair as [string, string]
+
+const original = JSON.parse((await call('get_rule', { id: ruleA })).text)
 report('get_rule', typeof original.version === 'number', `version=${original.version}`)
 
 // 쓰기 + 낙관적 잠금
 const updated = await call('update_rule', {
-  id: 'SC-1.5',
+  id: ruleA,
   version: original.version,
-  openIssue: '반경 N·M 값 미정',
+  openIssue: 'smoke 점검용 메모',
 })
 report('update_rule', !updated.isError, updated.isError ? updated.text : '수정됨')
 
 const stale = await call('update_rule', {
-  id: 'SC-1.5',
+  id: ruleA,
   version: original.version,
   statement: '덮어쓰기 시도',
 })
@@ -68,8 +81,8 @@ report(
 // BR 간 관계
 const created = await call('create_rule_link', {
   id: 'L-smoke',
-  fromRuleId: 'SC-1.5',
-  toRuleId: 'SC-1.6',
+  fromRuleId: ruleA,
+  toRuleId: ruleB,
   kind: '선행',
   note: 'smoke',
 })
@@ -77,8 +90,8 @@ report('create_rule_link', !created.isError, created.isError ? created.text : '�
 
 const duplicate = await call('create_rule_link', {
   id: 'L-smoke-2',
-  fromRuleId: 'SC-1.5',
-  toRuleId: 'SC-1.6',
+  fromRuleId: ruleA,
+  toRuleId: ruleB,
   kind: '선행',
 })
 report('중복 관계 거절', duplicate.isError, duplicate.isError ? '거절됨' : '통과해버림')
@@ -92,9 +105,9 @@ const smokeLink = links.find((l: { id: string }) => l.id === 'L-smoke')
 const deleted = await call('delete_rule_link', { id: 'L-smoke', version: smokeLink.version })
 report('delete_rule_link', !deleted.isError, deleted.isError ? deleted.text : '삭제됨')
 
-const current = JSON.parse((await call('get_rule', { id: 'SC-1.5' })).text)
+const current = JSON.parse((await call('get_rule', { id: ruleA })).text)
 await call('update_rule', {
-  id: 'SC-1.5',
+  id: ruleA,
   version: current.version,
   openIssue: original.openIssue ?? '',
 })

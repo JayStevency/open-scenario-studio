@@ -7,6 +7,7 @@ SC · BR · CAP · DEV 프레임워크를 웹 앱으로 옮기는 프로젝트. 
 ```bash
 pnpm install
 pnpm db:migrate     # SQLite 파일 생성 + 마이그레이션 (data/scenario-studio.db)
+pnpm db:seed:sample # 예제 데이터 (samples/order-flow) → DB
 pnpm db:seed        # design/data/*.tsv → DB
 pnpm dev            # web(5173) + api(3000) 동시 기동
 pnpm mcp:smoke      # MCP 도구를 실제 DB 에 대고 한 바퀴 점검
@@ -21,10 +22,12 @@ pnpm check:fix      # biome 포맷 + 린트 자동 수정
 ## 구조
 
 ```
-design/               요구사항·프로토타입·원본 데이터 (사람이 결정, 코드가 임의로 고치지 않는다)
+design/               요구사항·프로토타입 (사람이 결정, 코드가 임의로 고치지 않는다)
   REQUIREMENTS.md     FR-000 ~ FR-500, NFR-01 ~ NFR-06
   prototype.html      동작 프로토타입 — 다섯 화면과 검사 8종의 참조 구현
-  data/*.tsv          현재 데이터 (탭 구분, UTF-8 BOM)
+  data/*.tsv          실제 명세. 저장소에 올리지 않는다 — 없을 수 있다는 전제로 다룬다
+
+samples/order-flow    예제 데이터. 공개 저장소에서 바로 돌려볼 수 있게 둔 것
 
 packages/domain       @oss/domain — 서버·클라이언트 공용, 프레임워크 의존 없음
   types.ts            SC · BR · REL · LINK · CAP · DEV (REQUIREMENTS 4절)
@@ -68,13 +71,15 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
 - **SQLite** — 전체 데이터가 23KB 다. 편집자는 소수이고 에이전트는 MCP 로 로컬에서 붙는다. 서버 DB 를 둘 이유가 없다. 제약은 원시 타입 배열을 못 쓴다는 것 하나뿐이고(enum·Json 은 된다), 해당 필드는 JSON 으로 담고 읽을 때 배열로 되돌린다.
 - **Vite + Fastify 분리, Next.js 아님** — 이 앱은 문서가 아니라 편집기다. SSR·SEO 가 필요 없고, React Flow·TanStack Table·dnd-kit 이 전부 클라이언트 전용이라 RSC 의 이점이 없다.
 - **zustand + immer** — immer 의 patch 를 그대로 이력(FR-406)과 되돌리기(NFR-04)에 쓴다. 편집 → patch → 로컬 적용 + 서버 전송 + 이력 적재가 한 경로다. 이력을 따로 만들면 반드시 어긋난다.
-- **tRPC** — 클라이언트가 사내 웹 하나뿐이라 OpenAPI 왕복이 불필요하다. 외부 연동이 생기면 REST 를 추가한다.
+- **tRPC** — 클라이언트가 웹과 MCP 둘 다 같은 저장소 안에 있어 OpenAPI 왕복이 불필요하다. 외부 연동이 생기면 REST 를 추가한다.
 - **화면별 라이브러리** — 표는 `@tanstack/react-table` + `react-virtual`(NFR-01 규칙 1,000건), 관계도는 `@xyflow/react`, 편성 보드는 `@dnd-kit`, 내보내기는 `exceljs`.
 
 ## 작업 규칙
 
 - **요구사항이 기준이다.** 기능을 만들 때 `design/REQUIREMENTS.md`의 FR 번호를 찾아보고, 주석이나 커밋 메시지에 FR 번호를 남긴다.
 - **`design/` 아래는 건드리지 않는다.** TSV 나 REQUIREMENTS.md 수정은 사람의 결정이다.
+- **특정 도메인에 묶지 않는다.** 이 도구는 범용이다. 예시가 필요하면 `samples/` 를 쓰고, 코드·문서에 특정 프로젝트의 업무 용어를 박아 넣지 않는다.
+- **`design/data/` 가 없어도 빌드와 테스트가 통과해야 한다.** 데이터 접근은 `@oss/domain/designData` 로 모으고, 웹은 정적 import 대신 `import.meta.glob` 을 쓴다.
 - **데이터 모델 불변식**(REQUIREMENTS 4절)은 `packages/domain/src/integrity.ts`가 지킨다. 모델을 바꾸면 검사와 Prisma 스키마를 함께 바꾸고 테스트를 추가한다.
   - BR 은 정확히 하나의 SC 에 속한다. 최대 하나의 CAP 에 속한다(미배정 허용).
   - CAP 은 정확히 하나의 DEV 에 속한다.
@@ -95,12 +100,14 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
 
 | 대상 | 잠정인 이유 |
 |---|---|
-| `apps/api/prisma/schema.prisma` | 마이그레이션을 한 번도 돌리지 않았다. 아직 종이다 |
+| `apps/api/prisma/schema.prisma` | 요구사항 8절 미결 사항(엑셀 가져오기 · 승인 흐름)이 정해지면 바뀐다 |
 | `apps/api/src/router.ts` 의 `rule.update` | FR-102 구현의 첫 조각. 편집 단위·patch 형태가 화면 설계에 달렸다 |
 | `apps/api/src/router.ts` 의 `readProjectData` | 화면이 무엇을 필요로 하는지 정해지기 전에 쓴 매핑이다 |
 | `packages/domain/src/integrity.ts` 검사 11종 | 요구사항이 아니라 임의 판단으로 정한 목록이다. FR-500 의 검사 8종과는 별개다 |
 
-확정 전까지 `pnpm db:migrate` 를 돌려 스키마를 굳히지 않는다.
+## 알려진 결함
+
+**엔티티 ID 가 프로젝트 전역으로 유일하다.** `Scenario.id` 등이 `@id` 단독이라, 서로 다른 프로젝트가 같은 `SC-0` 을 쓰면 시드가 남의 행을 덮어쓴다. 지금은 **DB 하나에 프로젝트 하나**로 쓰는 것으로 피한다. 제대로 고치려면 복합 키(`@@id([projectId, id])`)로 바꾸거나 프로젝트마다 SQLite 파일을 나눠야 한다 — 아직 결정하지 않았다.
 
 ## 현재 상태
 

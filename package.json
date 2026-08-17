@@ -15,7 +15,8 @@
     "db:migrate": "pnpm --filter @oss/api db:migrate",
     "db:seed": "pnpm --filter @oss/api db:seed",
     "db:reset": "pnpm --filter @oss/api db:reset",
-    "mcp:smoke": "pnpm --filter @oss/mcp smoke"
+    "mcp:smoke": "pnpm --filter @oss/mcp smoke",
+    "db:seed:sample": "pnpm --filter @oss/api db:seed:sample"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

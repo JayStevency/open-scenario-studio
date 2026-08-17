@@ -9,7 +9,7 @@ import { createCallerFactory, createDirectContext } from '@oss/api/trpc'
 const AGENT_LABEL = process.env.OSS_AGENT_LABEL ?? 'mcp-agent'
 
 /** 프로젝트를 도구 인자마다 받지 않고 환경에서 고정한다. 에이전트가 실수로 남의 프로젝트를 건드리지 않게. */
-export const PROJECT_ID = process.env.OSS_PROJECT_ID ?? 'proj-robotaxi'
+export const PROJECT_ID = process.env.OSS_PROJECT_ID ?? 'default'
 
 const createCaller = createCallerFactory(appRouter)
 
