@@ -5,6 +5,9 @@ import type { Prisma } from './generated/prisma/client'
 import type { Db } from './prisma'
 import { authedProcedure, publicProcedure, router } from './trpc'
 
+// [잠정] readProjectData 와 rule.update 는 화면 설계 전에 미리 쓴 코드다.
+//        편집 단위와 응답 형태는 논의 결과에 따라 바뀐다. CLAUDE.md '잠정' 절 참고.
+
 const projectInput = z.object({ projectId: z.string() })
 
 /** DB 행을 도메인 타입으로. 도메인은 Prisma 를 모른다. */

@@ -70,6 +70,19 @@ apps/web              @oss/web — Vite 7 + React 19
 
 코드를 바꿨으면 `pnpm typecheck`와 `pnpm test`를 돌리고 결과를 보고한다. DB 스키마를 바꿨으면 `pnpm --filter @oss/api db:generate`도 함께 돌린다.
 
+## 잠정 — 요구사항 확정 전에 앞서 만든 것
+
+`REQUIREMENTS.md`는 v0.1 초안이고 8절에 미결 사항이 남아 있다. 아래는 그 위에 미리 쌓은 코드다. **확정된 설계가 아니라 한 가지 안**이며, 논의 결과에 따라 갈아엎는 것을 전제로 한다. 여기에 새 코드를 얹기 전에 먼저 확인하라.
+
+| 대상 | 잠정인 이유 |
+|---|---|
+| `apps/api/prisma/schema.prisma` | 마이그레이션을 한 번도 돌리지 않았다. 아직 종이다 |
+| `apps/api/src/router.ts` 의 `rule.update` | FR-102 구현의 첫 조각. 편집 단위·patch 형태가 화면 설계에 달렸다 |
+| `apps/api/src/router.ts` 의 `readProjectData` | 화면이 무엇을 필요로 하는지 정해지기 전에 쓴 매핑이다 |
+| `packages/domain/src/integrity.ts` 검사 11종 | 요구사항이 아니라 임의 판단으로 정한 목록이다. FR-500 의 검사 8종과는 별개다 |
+
+확정 전까지 `pnpm db:migrate` 를 돌려 스키마를 굳히지 않는다.
+
 ## 현재 상태
 
 앱 셸(FR-001, FR-002)과 데이터 적재·무결성 검사, 서버 골격(스키마·tRPC·낙관적 잠금·이력)까지 있다. 다섯 화면은 아직 비어 있고 `design/prototype.html`이 참조 구현이다.
