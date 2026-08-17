@@ -576,16 +576,126 @@ export const appRouter = router({
   }),
 
   /** 자동 기록과 사용자 메모를 시간순으로(FR-407). */
-  history: publicProcedure
-    .input(projectInput.extend({ limit: z.number().int().min(1).max(200).default(50) }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.changeLog.findMany({
+  /** FR-401 시나리오 하나를 보는 데 필요한 것을 한 번에 모아 준다. */
+  scenario: router({
+    list: publicProcedure.input(projectInput).query(({ ctx, input }) =>
+      ctx.prisma.scenario.findMany({
         where: { projectId: input.projectId },
-        orderBy: { at: 'desc' },
-        take: input.limit,
-        include: { author: { select: { name: true } } },
+        orderBy: { id: 'asc' },
       }),
     ),
+
+    detail: publicProcedure
+      .input(projectInput.extend({ id: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const where = { projectId: input.projectId }
+
+        const scenario = await ctx.prisma.scenario.findFirst({
+          where: { ...where, id: input.id },
+        })
+        if (scenario === null) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: `시나리오 ${input.id} 가 없다` })
+        }
+
+        const [rules, incoming, outgoing] = await Promise.all([
+          ctx.prisma.rule.findMany({
+            where: { ...where, scenarioId: input.id },
+            orderBy: { orderIndex: 'asc' },
+          }),
+          ctx.prisma.scenarioRelation.findMany({ where: { ...where, toId: input.id } }),
+          ctx.prisma.scenarioRelation.findMany({ where: { ...where, fromId: input.id } }),
+        ])
+
+        // FR-404 기준·연결 중 하나라도 이 시나리오에 속하면 목록에 보인다.
+        const ruleIds = rules.map((r) => r.id)
+        const links = await ctx.prisma.ruleLink.findMany({
+          where: { ...where, OR: [{ fromId: { in: ruleIds } }, { toId: { in: ruleIds } }] },
+          orderBy: { id: 'asc' },
+        })
+
+        return { scenario, rules, incoming, outgoing, links }
+      }),
+  }),
+
+  /** FR-406 자동 기록과 FR-407 사용자 메모를 한 줄기로 본다. */
+  history: router({
+    list: publicProcedure
+      .input(
+        projectInput.extend({
+          /** 주면 그 시나리오에 얽힌 기록만 추린다(FR-407). */
+          scenarioId: z.string().optional(),
+          limit: z.number().int().min(1).max(200).default(50),
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        const where = { projectId: input.projectId }
+
+        // 이력은 엔티티 ID 로 남는다. 시나리오로 추리려면 그 시나리오에 얽힌
+        // ID 를 먼저 모아야 한다 — 규칙, 그 규칙이 걸린 관계, 시나리오 자신.
+        let entityIds: string[] | undefined
+        if (input.scenarioId !== undefined) {
+          const rules = await ctx.prisma.rule.findMany({
+            where: { ...where, scenarioId: input.scenarioId },
+            select: { id: true },
+          })
+          const ruleIds = rules.map((r) => r.id)
+          const [links, relations] = await Promise.all([
+            ctx.prisma.ruleLink.findMany({
+              where: { ...where, OR: [{ fromId: { in: ruleIds } }, { toId: { in: ruleIds } }] },
+              select: { id: true },
+            }),
+            ctx.prisma.scenarioRelation.findMany({
+              where: {
+                ...where,
+                OR: [{ fromId: input.scenarioId }, { toId: input.scenarioId }],
+              },
+              select: { id: true },
+            }),
+          ])
+          entityIds = [
+            input.scenarioId,
+            ...ruleIds,
+            ...links.map((l) => l.id),
+            ...relations.map((r) => r.id),
+          ]
+        }
+
+        return ctx.prisma.changeLog.findMany({
+          where: entityIds === undefined ? where : { ...where, entityId: { in: entityIds } },
+          orderBy: { at: 'desc' },
+          take: input.limit,
+          include: { author: { select: { name: true } } },
+        })
+      }),
+
+    /** FR-407 결정 사항이나 질문을 메모로 남긴다. */
+    addNote: authedProcedure
+      .input(
+        projectInput.extend({
+          scenarioId: z.string(),
+          note: z.string().min(1),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.changeLog.create({
+            data: {
+              ...changeLogData({
+                projectId: input.projectId,
+                actor: ctx.actor,
+                authorId: await resolveAuthorId(ctx.prisma, ctx.actor),
+                entityType: 'Scenario',
+                entityId: input.scenarioId,
+                action: 'note',
+              }),
+              note: input.note,
+            },
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+  }),
 })
 
 export type AppRouter = typeof appRouter

@@ -45,7 +45,7 @@ export interface ChangeInput {
     | 'CapabilityGroup'
     | 'DevScenario'
   entityId: string
-  action: 'create' | 'update' | 'delete'
+  action: 'create' | 'update' | 'delete' | 'note'
   before?: Row | null
   after?: Row | null
 }

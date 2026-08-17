@@ -221,7 +221,7 @@ model ChangeLog {
   authorId   String?
   entityType String // Scenario | Rule | ScenarioRelation | RuleLink | CapabilityGroup | DevScenario
   entityId   String
-  action     String // create | update | delete
+  action     String // create | update | delete | note(FR-407 사용자 메모)
   /// 바뀐 필드의 변경 전 값. create 면 null.
   /// 되돌리기(NFR-04)는 이 값을 근거로 한다 — after 만으로는 원래 값을 알 수 없다.
   before     Json?

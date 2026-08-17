@@ -5,6 +5,7 @@ import { PROJECT_ID } from './api/project'
 import { queryClient, trpc } from './api/trpc'
 import { Checks } from './screens/Checks'
 import { RuleSheet } from './screens/RuleSheet'
+import { ScenarioDetail } from './screens/ScenarioDetail'
 
 /** FR-002 다섯 화면. 아직 만들지 않은 것은 자리만 잡아 둔다. */
 const TABS = [
@@ -50,7 +51,7 @@ function Studio() {
 
       <nav className="tabs">
         {TABS.map((t) => {
-          const ready = t.id === 'rules' || t.id === 'checks'
+          const ready = t.id === 'rules' || t.id === 'checks' || t.id === 'scenario'
           return (
             <button
               key={t.id}
@@ -73,6 +74,8 @@ function Studio() {
           <RuleSheet />
         ) : tab === 'checks' ? (
           <Checks />
+        ) : tab === 'scenario' ? (
+          <ScenarioDetail />
         ) : (
           <p className="placeholder">
             이 화면은 아직 만들지 않았다. <code>design/prototype.html</code> 이 참조 구현이다.

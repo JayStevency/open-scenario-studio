@@ -415,3 +415,252 @@ button.primary:disabled {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* ── 시나리오 상세 (FR-400) ──────────────────────────────────── */
+
+.detail {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: calc(100vh - 108px);
+}
+
+.detail-side {
+  border-right: 1px solid var(--line);
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.detail-side button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 16px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-side button:hover {
+  background: #fafafa;
+}
+
+.detail-side button.active {
+  border-left-color: var(--accent);
+  background: #f5f6ff;
+  font-weight: 600;
+}
+
+.sc-id {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-main {
+  overflow: auto;
+  padding: 20px 24px;
+}
+
+.detail-head h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+}
+
+.detail-meta {
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.panel {
+  margin-top: 22px;
+  max-width: 1000px;
+}
+
+.panel h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.panel-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rule-list,
+.link-list,
+.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.rule-list li,
+.link-list li,
+.history li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+}
+
+.rule-list li:last-child,
+.link-list li:last-child,
+.history li:last-child {
+  border-bottom: 0;
+}
+
+.rule-list code,
+.link-list code {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #f3f4f6;
+  font-size: 11px;
+}
+
+.link-list code.own {
+  background: #e0e7ff;
+  color: #3730a3;
+  font-weight: 600;
+}
+
+.rule-type {
+  flex: none;
+  width: 76px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rule-statement {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-status {
+  flex: none;
+  font-size: 11px;
+}
+
+.status-done {
+  color: var(--muted);
+}
+.status-draft {
+  color: var(--warn);
+}
+
+.link-kind {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11px;
+}
+
+.link-note {
+  flex: 1;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unlink {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.link-form,
+.note-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.link-form select,
+.link-form input,
+.note-form input {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.link-form input,
+.note-form input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.form-error {
+  flex-basis: 100%;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.history time {
+  flex: none;
+  width: 150px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actor {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.actor-agent {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.actor-user {
+  background: #f3f4f6;
+  color: var(--muted);
+}
+
+.what {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 12px;
+}
