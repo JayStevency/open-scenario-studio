@@ -75,7 +75,7 @@ model OptionList {
 
 /// SC — 시나리오
 model Scenario {
-  id           String  @id
+  id           String
   projectId    String
   name         String
   displayName  String
@@ -87,18 +87,18 @@ model Scenario {
   y            Float?
   version      Int     @default(1)
 
-  project       Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rules         Rule[]
-  outgoingRels  ScenarioRelation[] @relation("relFrom")
-  incomingRels  ScenarioRelation[] @relation("relTo")
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rules        Rule[]
+  outgoingRels ScenarioRelation[] @relation("relFrom")
+  incomingRels ScenarioRelation[] @relation("relTo")
 
-  @@unique([projectId, id])
-  @@index([projectId])
+  // ID 는 프로젝트 안에서만 유일하다. 다른 프로젝트가 같은 SC-0 을 써도 부딪히지 않는다.
+  @@id([projectId, id])
 }
 
 /// BR — 동작 규칙. 정확히 하나의 SC, 최대 하나의 CAP 에 속한다.
 model Rule {
-  id           String  @id
+  id           String
   projectId    String
   scenarioId   String
   statement    String
@@ -112,22 +112,24 @@ model Rule {
 
   project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   // SC 삭제 시 소속 BR 을 함께 지울지는 앱이 묻는다(4절) — DB 는 Restrict 로 사고를 막는다.
-  scenario   Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
-  // CAP 삭제 시 배정만 해제된다.
-  capability CapabilityGroup? @relation(fields: [capabilityId], references: [id], onDelete: SetNull)
+  scenario   Scenario         @relation(fields: [projectId, scenarioId], references: [projectId, id], onDelete: Restrict)
+  // CAP 삭제 시 배정만 해제된다(FR-108). 복합 키에서는 SetNull 을 못 쓰므로
+  // DB 가 아니라 앱이 먼저 해제한다 — 무엇이 함께 정리되는지 사용자에게 알려야 하기도 하다.
+  capability CapabilityGroup? @relation(fields: [projectId, capabilityId], references: [projectId, id], onDelete: NoAction)
 
   // BR 삭제 시 참조하는 LINK 는 함께 지운다(4절).
   outgoingLinks RuleLink[]         @relation("linkFrom")
   incomingLinks RuleLink[]         @relation("linkTo")
   basisForRels  ScenarioRelation[] @relation("relBasis")
 
+  @@id([projectId, id])
   @@index([projectId, scenarioId])
   @@index([projectId, capabilityId])
 }
 
 /// REL — 시나리오 간 관계
 model ScenarioRelation {
-  id          String  @id
+  id          String
   projectId   String
   fromId      String
   toId        String
@@ -137,17 +139,18 @@ model ScenarioRelation {
   version     Int     @default(1)
 
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  from      Scenario @relation("relFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to        Scenario @relation("relTo", fields: [toId], references: [id], onDelete: Cascade)
+  from      Scenario @relation("relFrom", fields: [projectId, fromId], references: [projectId, id], onDelete: Cascade)
+  to        Scenario @relation("relTo", fields: [projectId, toId], references: [projectId, id], onDelete: NoAction)
   // 근거 규칙이 지워지면 지정만 풀린다(FR-108).
-  basisRule Rule?    @relation("relBasis", fields: [basisRuleId], references: [id], onDelete: SetNull)
+  basisRule Rule?    @relation("relBasis", fields: [projectId, basisRuleId], references: [projectId, id], onDelete: NoAction)
 
+  @@id([projectId, id])
   @@index([projectId])
 }
 
 /// LINK — BR 간 관계. 같은 두 규칙 사이 같은 종류는 하나뿐이다(FR-405).
 model RuleLink {
-  id        String @id
+  id        String
   projectId String
   fromId    String
   toId      String
@@ -156,16 +159,17 @@ model RuleLink {
   version   Int    @default(1)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  from    Rule    @relation("linkFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to      Rule    @relation("linkTo", fields: [toId], references: [id], onDelete: Cascade)
+  from    Rule    @relation("linkFrom", fields: [projectId, fromId], references: [projectId, id], onDelete: Cascade)
+  to      Rule    @relation("linkTo", fields: [projectId, toId], references: [projectId, id], onDelete: NoAction)
 
+  @@id([projectId, id])
   @@unique([projectId, fromId, toId, kind])
   @@index([projectId])
 }
 
 /// CAP — 기능 그룹. 정확히 하나의 DEV 에 속한다.
 model CapabilityGroup {
-  id           String @id
+  id           String
   projectId    String
   devId        String
   name         String
@@ -173,15 +177,16 @@ model CapabilityGroup {
   version      Int    @default(1)
 
   project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  dev     DevScenario @relation(fields: [devId], references: [id], onDelete: Restrict)
+  dev     DevScenario @relation(fields: [projectId, devId], references: [projectId, id], onDelete: Restrict)
   rules   Rule[]
 
+  @@id([projectId, id])
   @@index([projectId, devId])
 }
 
 /// DEV — 개발 시나리오
 model DevScenario {
-  id                 String   @id
+  id                 String
   projectId          String
   name               String
   description        String?
@@ -194,6 +199,7 @@ model DevScenario {
   project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   capabilities CapabilityGroup[]
 
+  @@id([projectId, id])
   @@index([projectId])
 }
 

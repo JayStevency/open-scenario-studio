@@ -85,6 +85,8 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
   - CAP 은 정확히 하나의 DEV 에 속한다.
   - LINK 는 방향이 있고 SC 경계를 넘는다. 자기참조·중복 금지(FR-405).
   - 삭제한 ID 는 재사용하지 않는다.
+  - **ID 는 프로젝트 안에서만 유일하다.** 모든 엔티티가 `@@id([projectId, id])` 복합 키다. 서로 다른 프로젝트가 같은 `SC-0` 을 써도 부딪히지 않는다. 조회·수정은 반드시 `projectId` 로 범위를 좁힌다.
+  - CAP·근거 규칙 삭제 시의 배정 해제는 **DB 가 아니라 앱이 한다**(FR-108). 복합 키에서는 `SetNull` 을 쓸 수 없고, 무엇이 함께 정리되는지 사용자에게 알려야 하기 때문이다.
 - **모든 편집 뮤테이션은 낙관적 잠금을 거친다**(NFR-03). `rule.update` 가 본보기다 — `updateMany` + version 조건 → 0건이면 `assertUpdated` 로 CONFLICT, 같은 트랜잭션에서 `changeLog` 적재. 새 뮤테이션은 이 패턴을 복사해 쓴다.
 - **도메인은 Prisma 를 모른다.** DB 행 → 도메인 타입 변환은 `apps/api/src/router.ts`의 `readProjectData` 가 맡는다.
 - **화면 표기는 한국어**(NFR-05). 코드 식별자는 영문.
@@ -104,10 +106,6 @@ claude mcp add scenario-studio -- pnpm --filter @oss/mcp start
 | `apps/api/src/router.ts` 의 `rule.update` | FR-102 구현의 첫 조각. 편집 단위·patch 형태가 화면 설계에 달렸다 |
 | `apps/api/src/router.ts` 의 `readProjectData` | 화면이 무엇을 필요로 하는지 정해지기 전에 쓴 매핑이다 |
 | `packages/domain/src/integrity.ts` 검사 11종 | 요구사항이 아니라 임의 판단으로 정한 목록이다. FR-500 의 검사 8종과는 별개다 |
-
-## 알려진 결함
-
-**엔티티 ID 가 프로젝트 전역으로 유일하다.** `Scenario.id` 등이 `@id` 단독이라, 서로 다른 프로젝트가 같은 `SC-0` 을 쓰면 시드가 남의 행을 덮어쓴다. 지금은 **DB 하나에 프로젝트 하나**로 쓰는 것으로 피한다. 제대로 고치려면 복합 키(`@@id([projectId, id])`)로 바꾸거나 프로젝트마다 SQLite 파일을 나눠야 한다 — 아직 결정하지 않았다.
 
 ## 현재 상태
 

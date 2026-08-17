@@ -29,7 +29,7 @@ await prisma.project.upsert({
 // 외래키 순서: DEV → CAP → SC → BR → REL → LINK
 for (const dev of data.devScenarios) {
   await prisma.devScenario.upsert({
-    where: { id: dev.id },
+    where: { projectId_id: { projectId: PROJECT_ID, id: dev.id } },
     update: { name: dev.name, description: dev.description, owner: dev.owner },
     create: {
       id: dev.id,
@@ -43,7 +43,7 @@ for (const dev of data.devScenarios) {
 
 for (const cap of data.capabilities) {
   await prisma.capabilityGroup.upsert({
-    where: { id: cap.id },
+    where: { projectId_id: { projectId: PROJECT_ID, id: cap.id } },
     update: { name: cap.name, description: cap.description, devId: cap.devScenarioId },
     create: {
       id: cap.id,
@@ -57,7 +57,7 @@ for (const cap of data.capabilities) {
 
 for (const sc of data.scenarios) {
   await prisma.scenario.upsert({
-    where: { id: sc.id },
+    where: { projectId_id: { projectId: PROJECT_ID, id: sc.id } },
     update: { name: sc.name, displayName: sc.displayName, area: sc.area },
     create: {
       id: sc.id,
@@ -71,7 +71,7 @@ for (const sc of data.scenarios) {
 
 for (const [index, rule] of data.rules.entries()) {
   await prisma.rule.upsert({
-    where: { id: rule.id },
+    where: { projectId_id: { projectId: PROJECT_ID, id: rule.id } },
     update: {
       scenarioId: rule.scenarioId,
       statement: rule.statement,
@@ -97,7 +97,7 @@ for (const [index, rule] of data.rules.entries()) {
 
 for (const rel of data.relations) {
   await prisma.scenarioRelation.upsert({
-    where: { id: rel.id },
+    where: { projectId_id: { projectId: PROJECT_ID, id: rel.id } },
     update: {
       fromId: rel.fromScenarioId,
       toId: rel.toScenarioId,
@@ -119,7 +119,7 @@ for (const rel of data.relations) {
 
 for (const link of data.links) {
   await prisma.ruleLink.upsert({
-    where: { id: link.id },
+    where: { projectId_id: { projectId: PROJECT_ID, id: link.id } },
     update: { fromId: link.fromRuleId, toId: link.toRuleId, kind: link.kind, note: link.note },
     create: {
       id: link.id,
