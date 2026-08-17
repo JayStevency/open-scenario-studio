@@ -1,6 +1,6 @@
+import { checkIntegrity } from '@oss/domain'
 import { useMemo } from 'react'
 import { loadSeedData } from './data/seed'
-import { checkIntegrity } from './domain/integrity'
 
 /** FR-002 다섯 화면. 지금은 자리만 잡아 둔다. */
 const TABS = [

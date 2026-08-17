@@ -1,0 +1,212 @@
+// design/REQUIREMENTS.md 4절 데이터 모델.
+// 모든 편집 대상 엔티티는 version 을 갖는다 — 갱신 시 버전이 어긋나면 409 로 막는다(NFR-03).
+
+// Prisma 7: 접속 URL 은 prisma.config.ts 로, 런타임 연결은 드라이버 어댑터로 넘어갔다.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// 프로젝트 단위로 데이터를 분리한다(요구사항 3절).
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  scenarios    Scenario[]
+  rules        Rule[]
+  relations    ScenarioRelation[]
+  links        RuleLink[]
+  capabilities CapabilityGroup[]
+  devScenarios DevScenario[]
+  changes      ChangeLog[]
+  memberships  Membership[]
+  optionLists  OptionList[]
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String
+  memberships Membership[]
+  changes     ChangeLog[]
+}
+
+/// 사용자는 프로젝트별로 역할을 부여받는다(요구사항 3절).
+enum Role {
+  PLANNER // 기획자
+  DEV_LEAD // 개발 리드
+  REVIEWER // 검토자
+  ADMIN // 관리자
+}
+
+model Membership {
+  projectId String
+  userId    String
+  role      Role
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+}
+
+/// 유형·담당 주체·상태 선택 목록은 관리자가 프로젝트별로 설정한다(FR-107).
+model OptionList {
+  id        String   @id @default(cuid())
+  projectId String
+  kind      String // ruleType | owner | status | relationKind | linkKind | lifecycleStage
+  values    String[]
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, kind])
+}
+
+/// SC — 시나리오
+model Scenario {
+  id           String  @id
+  projectId    String
+  name         String
+  displayName  String
+  area         String
+  trigger      String?
+  endCondition String?
+  lifecycle    String?
+  x            Float?
+  y            Float?
+  version      Int     @default(1)
+
+  project       Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rules         Rule[]
+  outgoingRels  ScenarioRelation[] @relation("relFrom")
+  incomingRels  ScenarioRelation[] @relation("relTo")
+
+  @@unique([projectId, id])
+  @@index([projectId])
+}
+
+/// BR — 동작 규칙. 정확히 하나의 SC, 최대 하나의 CAP 에 속한다.
+model Rule {
+  id           String  @id
+  projectId    String
+  scenarioId   String
+  statement    String
+  ruleType     String
+  owner        String?
+  capabilityId String?
+  status       String
+  openIssue    String?
+  orderIndex   Int     @default(0)
+  version      Int     @default(1)
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // SC 삭제 시 소속 BR 을 함께 지울지는 앱이 묻는다(4절) — DB 는 Restrict 로 사고를 막는다.
+  scenario   Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+  // CAP 삭제 시 배정만 해제된다.
+  capability CapabilityGroup? @relation(fields: [capabilityId], references: [id], onDelete: SetNull)
+
+  // BR 삭제 시 참조하는 LINK 는 함께 지운다(4절).
+  outgoingLinks RuleLink[]         @relation("linkFrom")
+  incomingLinks RuleLink[]         @relation("linkTo")
+  basisForRels  ScenarioRelation[] @relation("relBasis")
+
+  @@index([projectId, scenarioId])
+  @@index([projectId, capabilityId])
+}
+
+/// REL — 시나리오 간 관계
+model ScenarioRelation {
+  id          String  @id
+  projectId   String
+  fromId      String
+  toId        String
+  kind        String // 전환 · 분기 · 재실행 · 준용
+  condition   String?
+  basisRuleId String?
+  version     Int     @default(1)
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  from      Scenario @relation("relFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to        Scenario @relation("relTo", fields: [toId], references: [id], onDelete: Cascade)
+  // 근거 규칙이 지워지면 지정만 풀린다(FR-108).
+  basisRule Rule?    @relation("relBasis", fields: [basisRuleId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+}
+
+/// LINK — BR 간 관계. 같은 두 규칙 사이 같은 종류는 하나뿐이다(FR-405).
+model RuleLink {
+  id        String @id
+  projectId String
+  fromId    String
+  toId      String
+  kind      String // 선행 · 예외 · 대체 · 데이터 의존
+  note      String?
+  version   Int    @default(1)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  from    Rule    @relation("linkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to      Rule    @relation("linkTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, fromId, toId, kind])
+  @@index([projectId])
+}
+
+/// CAP — 기능 그룹. 정확히 하나의 DEV 에 속한다.
+model CapabilityGroup {
+  id           String @id
+  projectId    String
+  devId        String
+  name         String
+  description  String?
+  version      Int    @default(1)
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dev     DevScenario @relation(fields: [devId], references: [id], onDelete: Restrict)
+  rules   Rule[]
+
+  @@index([projectId, devId])
+}
+
+/// DEV — 개발 시나리오
+model DevScenario {
+  id                 String   @id
+  projectId          String
+  name               String
+  description        String?
+  owner              String?
+  prerequisiteDevIds String[]
+  acceptanceCriteria String?
+  version            Int      @default(1)
+
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  capabilities CapabilityGroup[]
+
+  @@index([projectId])
+}
+
+/// 변경 이력. append-only — 수정·삭제하지 않는다(FR-406, NFR-04).
+model ChangeLog {
+  id         BigInt   @id @default(autoincrement())
+  projectId  String
+  at         DateTime @default(now())
+  authorId   String?
+  entityType String // Scenario | Rule | ScenarioRelation | RuleLink | CapabilityGroup | DevScenario
+  entityId   String
+  action     String // create | update | delete
+  /// immer 가 만든 patch. 되돌리기의 근거가 된다(NFR-04).
+  patch      Json
+  /// 사용자가 남긴 메모(FR-407). 자동 기록과 한 줄기로 본다.
+  note       String?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, at])
+  @@index([projectId, entityType, entityId])
+}

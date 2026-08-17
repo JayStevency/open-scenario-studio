@@ -3,10 +3,11 @@ export function parseTsv(text: string): Record<string, string>[] {
   const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').trimEnd()
   if (clean === '') return []
 
-  const lines = clean.split('\n')
-  const header = lines[0]!.split('\t').map((h) => h.trim())
+  const [headerLine, ...rows] = clean.split('\n')
+  if (headerLine === undefined) return []
+  const header = headerLine.split('\t').map((h) => h.trim())
 
-  return lines.slice(1).flatMap((line) => {
+  return rows.flatMap((line) => {
     if (line.trim() === '') return []
     const cells = line.split('\t')
     const row: Record<string, string> = {}

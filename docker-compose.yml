@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: oss-db
+    environment:
+      POSTGRES_USER: oss
+      POSTGRES_PASSWORD: oss
+      POSTGRES_DB: scenario_studio
+    ports:
+      - '5432:5432'
+    volumes:
+      - oss-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oss -d scenario_studio']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  oss-db-data:

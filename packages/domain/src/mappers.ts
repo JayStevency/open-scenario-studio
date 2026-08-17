@@ -1,14 +1,7 @@
 /**
- * design/data/*.tsv 를 빌드 시점에 읽어 ProjectData 로 바꾼다.
- * 서버 저장이 붙기 전까지의 시드 데이터원이다(REQUIREMENTS 7절).
+ * design/data/*.tsv 원문 → ProjectData.
+ * 웹은 `?raw` import 로, 서버는 fs 로 문자열을 읽어 같은 함수에 넣는다.
  */
-import scenariosTsv from '../../design/data/01_SC_scenarios.tsv?raw'
-import rulesTsv from '../../design/data/02_BR_rules.tsv?raw'
-import relationsTsv from '../../design/data/03_REL_scenario_relations.tsv?raw'
-import capabilitiesTsv from '../../design/data/04_CAP_capability_groups.tsv?raw'
-import devScenariosTsv from '../../design/data/05_DEV_dev_scenarios.tsv?raw'
-import linksTsv from '../../design/data/06_LINK_br_relations.tsv?raw'
-
 import { orNull, parseIdList, parseTsv } from './tsv'
 import type {
   CapabilityGroup,
@@ -18,21 +11,41 @@ import type {
   RuleLink,
   Scenario,
   ScenarioRelation,
-} from '../domain/types'
+} from './types'
+
+/** TSV 파일 여섯 종의 원문. 키는 design/data 의 파일 성격과 1:1. */
+export interface TsvSources {
+  scenarios: string
+  rules: string
+  relations: string
+  capabilities: string
+  devScenarios: string
+  links: string
+}
+
+/** design/data 안의 파일명. 서버·스크립트가 경로를 만들 때 쓴다. */
+export const TSV_FILENAMES: Record<keyof TsvSources, string> = {
+  scenarios: '01_SC_scenarios.tsv',
+  rules: '02_BR_rules.tsv',
+  relations: '03_REL_scenario_relations.tsv',
+  capabilities: '04_CAP_capability_groups.tsv',
+  devScenarios: '05_DEV_dev_scenarios.tsv',
+  links: '06_LINK_br_relations.tsv',
+}
 
 function cell(row: Record<string, string>, key: string): string {
   return row[key] ?? ''
 }
 
-export function loadSeedData(): ProjectData {
-  const scenarios: Scenario[] = parseTsv(scenariosTsv).map((r) => ({
+export function parseProjectData(sources: TsvSources): ProjectData {
+  const scenarios: Scenario[] = parseTsv(sources.scenarios).map((r) => ({
     id: cell(r, 'SC ID'),
     name: cell(r, '명칭'),
     displayName: cell(r, '표시명'),
     area: cell(r, '영역'),
   }))
 
-  const rules: Rule[] = parseTsv(rulesTsv).map((r) => ({
+  const rules: Rule[] = parseTsv(sources.rules).map((r) => ({
     id: cell(r, 'BR ID'),
     scenarioId: cell(r, 'SC ID'),
     statement: cell(r, '규칙 문장'),
@@ -42,7 +55,7 @@ export function loadSeedData(): ProjectData {
     status: cell(r, '상태'),
   }))
 
-  const relations: ScenarioRelation[] = parseTsv(relationsTsv).map((r) => ({
+  const relations: ScenarioRelation[] = parseTsv(sources.relations).map((r) => ({
     id: cell(r, 'REL ID'),
     fromScenarioId: cell(r, '출발 SC'),
     toScenarioId: cell(r, '도착 SC'),
@@ -51,7 +64,7 @@ export function loadSeedData(): ProjectData {
     basisRuleId: orNull(cell(r, '근거 규칙 ID')),
   }))
 
-  const capabilities: CapabilityGroup[] = parseTsv(capabilitiesTsv).map((r) => ({
+  const capabilities: CapabilityGroup[] = parseTsv(sources.capabilities).map((r) => ({
     id: cell(r, 'CAP ID'),
     devScenarioId: cell(r, 'DEV ID'),
     name: cell(r, '명칭'),
@@ -59,7 +72,7 @@ export function loadSeedData(): ProjectData {
     ruleIds: parseIdList(cell(r, '포함 BR ID')),
   }))
 
-  const devScenarios: DevScenario[] = parseTsv(devScenariosTsv).map((r) => ({
+  const devScenarios: DevScenario[] = parseTsv(sources.devScenarios).map((r) => ({
     id: cell(r, 'DEV ID'),
     name: cell(r, '명칭'),
     description: cell(r, '설명'),
@@ -67,7 +80,7 @@ export function loadSeedData(): ProjectData {
     capabilityIds: parseIdList(cell(r, '포함 CAP')),
   }))
 
-  const links: RuleLink[] = parseTsv(linksTsv).map((r) => ({
+  const links: RuleLink[] = parseTsv(sources.links).map((r) => ({
     id: cell(r, 'LINK ID'),
     fromRuleId: cell(r, '기준 BR'),
     toRuleId: cell(r, '연결 BR'),

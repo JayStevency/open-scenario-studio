@@ -17,6 +17,6 @@
       "Bash(find:*)",
       "Bash(rg:*)"
     ],
-    "deny": ["Read(./.env)", "Read(./.env.*)"]
+    "deny": ["Read(**/.env)", "Read(**/.env.local)"]
   }
 }
