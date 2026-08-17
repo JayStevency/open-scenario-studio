@@ -1089,6 +1089,148 @@ export const appRouter = router({
         })
       }),
 
+    /**
+     * NFR-04 되돌리기. 이력에 남은 before 를 근거로 되돌린다.
+     *
+     * 이력 자체는 고치지 않는다 — 되돌린 것도 새 기록으로 남는다(append-only).
+     * 에이전트가 대량으로 고친 뒤 잘못됐을 때 한 건씩 물리는 용도다.
+     */
+    revert: authedProcedure
+      .input(projectInput.extend({ changeId: z.number().int() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await ctx.prisma.$transaction(async (tx) => {
+            const entry = await tx.changeLog.findFirst({
+              where: { id: input.changeId, projectId: input.projectId },
+            })
+            if (entry === null) {
+              throw new TRPCError({ code: 'NOT_FOUND', message: '그런 기록이 없다' })
+            }
+
+            const authorId = await resolveAuthorId(tx, ctx.actor)
+            const base = {
+              projectId: input.projectId,
+              actor: ctx.actor,
+              authorId,
+              entityId: entry.entityId,
+            }
+
+            // 수정을 되돌린다 — before 를 그대로 다시 쓴다.
+            if (entry.action === 'update') {
+              const before = entry.before as Record<string, unknown> | null
+              if (before === null || Object.keys(before).length === 0) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: '이전 값이 남아 있지 않아 되돌릴 수 없다',
+                })
+              }
+
+              const where = { id: entry.entityId, projectId: input.projectId }
+              const data = { ...before, version: { increment: 1 } }
+
+              const applied =
+                entry.entityType === 'Rule'
+                  ? await tx.rule.updateMany({ where, data: data as never })
+                  : entry.entityType === 'Scenario'
+                    ? await tx.scenario.updateMany({ where, data: data as never })
+                    : entry.entityType === 'ScenarioRelation'
+                      ? await tx.scenarioRelation.updateMany({ where, data: data as never })
+                      : entry.entityType === 'CapabilityGroup'
+                        ? await tx.capabilityGroup.updateMany({ where, data: data as never })
+                        : null
+
+              if (applied === null) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: `${entry.entityType} 는 아직 되돌릴 수 없다`,
+                })
+              }
+              if (applied.count === 0) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: '대상이 이미 사라졌다' })
+              }
+
+              await tx.changeLog.create({
+                data: {
+                  ...changeLogData({
+                    ...base,
+                    entityType: entry.entityType as never,
+                    action: 'update',
+                    before: entry.after as Record<string, unknown> | null,
+                    after: before,
+                  }),
+                  note: `기록 ${entry.id} 되돌림`,
+                },
+              })
+              return { reverted: 'update' as const }
+            }
+
+            // 생성을 되돌린다 — 지운다. 지금은 BR 간 관계만 다룬다.
+            if (entry.action === 'create' && entry.entityType === 'RuleLink') {
+              const { count } = await tx.ruleLink.deleteMany({
+                where: { id: entry.entityId, projectId: input.projectId },
+              })
+              if (count === 0) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: '이미 지워졌다' })
+              }
+              await tx.changeLog.create({
+                data: {
+                  ...changeLogData({
+                    ...base,
+                    entityType: 'RuleLink',
+                    action: 'delete',
+                    before: entry.after as Record<string, unknown> | null,
+                    after: null,
+                  }),
+                  note: `기록 ${entry.id} 되돌림`,
+                },
+              })
+              return { reverted: 'create' as const }
+            }
+
+            // 삭제를 되돌린다 — before 로 다시 만든다.
+            if (entry.action === 'delete' && entry.entityType === 'RuleLink') {
+              const before = entry.before as Record<string, string> | null
+              if (before === null) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: '이전 값이 없어 되살릴 수 없다',
+                })
+              }
+              await tx.ruleLink.create({
+                data: {
+                  id: entry.entityId,
+                  projectId: input.projectId,
+                  fromId: before.fromId ?? '',
+                  toId: before.toId ?? '',
+                  kind: before.kind ?? '',
+                  note: before.note ?? '',
+                },
+              })
+              await tx.changeLog.create({
+                data: {
+                  ...changeLogData({
+                    ...base,
+                    entityType: 'RuleLink',
+                    action: 'create',
+                    before: null,
+                    after: before,
+                  }),
+                  note: `기록 ${entry.id} 되돌림`,
+                },
+              })
+              return { reverted: 'delete' as const }
+            }
+
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${entry.entityType} ${entry.action} 은 아직 되돌릴 수 없다`,
+            })
+          })
+        } catch (error) {
+          throw toTrpcError(error)
+        }
+      }),
+
     /** FR-407 결정 사항이나 질문을 메모로 남긴다. */
     addNote: authedProcedure
       .input(

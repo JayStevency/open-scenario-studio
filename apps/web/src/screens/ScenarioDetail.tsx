@@ -88,6 +88,16 @@ function Detail({ scenarioId }: { scenarioId: string }) {
   const createLink = useMutation(trpc.link.create.mutationOptions({ onSuccess: refresh }))
   const deleteLink = useMutation(trpc.link.delete.mutationOptions({ onSuccess: refresh }))
   const addNote = useMutation(trpc.history.addNote.mutationOptions({ onSuccess: refresh }))
+  const [revertError, setRevertError] = useState<string | null>(null)
+  const revert = useMutation(
+    trpc.history.revert.mutationOptions({
+      onSuccess: async () => {
+        setRevertError(null)
+        await refresh()
+      },
+      onError: (e: unknown) => setRevertError(e instanceof Error ? e.message : String(e)),
+    }),
+  )
 
   if (detail.isPending) return <p className="placeholder">불러오는 중…</p>
   if (detail.isError) {
@@ -188,6 +198,7 @@ function Detail({ scenarioId }: { scenarioId: string }) {
           pending={addNote.isPending}
           onAdd={(note) => addNote.mutate({ projectId: PROJECT_ID, scenarioId, note })}
         />
+        {revertError !== null && <p className="form-error">{revertError}</p>}
         <ol className="history">
           {((history.data ?? []) as HistoryEntry[]).map((h) => (
             <li key={h.id}>
@@ -199,6 +210,18 @@ function Detail({ scenarioId }: { scenarioId: string }) {
               <span className="what">
                 {h.action === 'note' ? h.note : `${h.entityType} ${h.entityId} ${h.action}`}
               </span>
+              {/* NFR-04 이력을 근거로 한 건씩 되돌린다 */}
+              {h.action !== 'note' && (
+                <button
+                  type="button"
+                  className="revert"
+                  disabled={revert.isPending}
+                  onClick={() => revert.mutate({ projectId: PROJECT_ID, changeId: h.id })}
+                  title="이 변경을 되돌린다. 되돌린 것도 기록으로 남는다"
+                >
+                  되돌리기
+                </button>
+              )}
             </li>
           ))}
           {(history.data ?? []).length === 0 && <li className="empty">기록이 없다.</li>}

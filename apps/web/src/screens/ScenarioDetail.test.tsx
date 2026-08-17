@@ -64,6 +64,7 @@ const history = [
 const createLink = vi.fn()
 const deleteLink = vi.fn()
 const addNote = vi.fn()
+const revert = vi.fn()
 
 vi.mock('../api/trpc', () => {
   const query = (key: string, data: unknown) => ({
@@ -87,7 +88,11 @@ vi.mock('../api/trpc', () => {
           },
         ]),
       },
-      history: { list: query('history', history), addNote: mutation(addNote) },
+      history: {
+        list: query('history', history),
+        addNote: mutation(addNote),
+        revert: mutation(revert),
+      },
       link: { create: mutation(createLink), delete: mutation(deleteLink) },
     },
   }
@@ -108,6 +113,7 @@ beforeEach(() => {
   createLink.mockClear()
   deleteLink.mockClear()
   addNote.mockClear()
+  revert.mockClear()
 })
 afterEach(cleanup)
 
@@ -190,6 +196,17 @@ describe('시나리오 상세 (FR-400)', () => {
     expect(screen.getByText('RuleLink L-4 create')).toBeDefined()
     // 에이전트가 고친 것을 구분해서 보여준다
     expect(screen.getByText(/에이전트/)).toBeDefined()
+  })
+
+  it('자동 기록은 되돌릴 수 있고 메모는 되돌릴 것이 없다 (NFR-04)', async () => {
+    renderDetail()
+    await screen.findByText('RuleLink L-4 create')
+    // 기록 2건 중 자동 기록 1건에만 되돌리기가 붙는다
+    const buttons = screen.getAllByText('되돌리기')
+    expect(buttons).toHaveLength(1)
+
+    await userEvent.click(buttons[0] as HTMLElement)
+    expect(revert.mock.calls[0]?.[0]).toMatchObject({ changeId: 2 })
   })
 
   it('메모를 남기면 서버로 보낸다 (FR-407)', async () => {

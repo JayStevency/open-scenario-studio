@@ -949,3 +949,45 @@ button.primary:disabled {
   font-size: 12px;
   cursor: pointer;
 }
+
+/* 엑셀 내보내기 (FR-005) */
+.export {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.export:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.export:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 되돌리기 (NFR-04) */
+.revert {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.revert:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}

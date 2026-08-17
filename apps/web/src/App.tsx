@@ -3,6 +3,7 @@ import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PROJECT_ID } from './api/project'
 import { queryClient, trpc } from './api/trpc'
+import { buildWorkbook, exportFileName } from './export/workbook'
 import { Board } from './screens/Board'
 import { Checks } from './screens/Checks'
 import { Diagram } from './screens/Diagram'
@@ -49,6 +50,9 @@ function Studio() {
           <Count label="관계" value={data?.relations.length} />
           <Count label="기능 그룹" value={data?.capabilities.length} />
         </dl>
+
+        {/* FR-005 엑셀 내보내기 */}
+        <ExportButton data={data} />
       </header>
 
       <nav className="tabs">
@@ -85,6 +89,44 @@ function Studio() {
         )}
       </main>
     </div>
+  )
+}
+
+function ExportButton({ data }: { data: ReturnType<typeof useQuery>['data'] }) {
+  const [state, setState] = useState<'idle' | 'working' | 'error'>('idle')
+
+  async function download() {
+    if (data === undefined) return
+    setState('working')
+    try {
+      const workbook = buildWorkbook(data as never, '시나리오 스튜디오')
+      const buffer = await workbook.xlsx.writeBuffer()
+      const url = URL.createObjectURL(
+        new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }),
+      )
+      const link = document.createElement('a')
+      link.href = url
+      link.download = exportFileName('시나리오 스튜디오', new Date())
+      link.click()
+      URL.revokeObjectURL(url)
+      setState('idle')
+    } catch {
+      setState('error')
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="export"
+      onClick={download}
+      disabled={data === undefined || state === 'working'}
+      title="규칙 · 관계 · 기능 그룹 · 개발 시나리오를 시트로 나눠 내보낸다"
+    >
+      {state === 'working' ? '만드는 중…' : state === 'error' ? '내보내기 실패' : '엑셀 내보내기'}
+    </button>
   )
 }
 
