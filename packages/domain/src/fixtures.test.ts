@@ -30,6 +30,7 @@ describe.skipIf(!present)('design/data 적재', () => {
 
 describe.skipIf(!present)('참조 무결성', () => {
   it('design/data 에 위반이 없다', () => {
-    expect(checkIntegrity(data!)).toEqual([])
+    if (data === null) return
+    expect(checkIntegrity(data)).toEqual([])
   })
 })

@@ -45,14 +45,16 @@ interface BoardData {
   scenarios: { id: string; name: string }[]
 }
 
+/** 질의 입력. 컴포넌트 밖에 두어 매 렌더 새 객체가 되지 않게 한다. */
+const QUERY_INPUT = { projectId: PROJECT_ID }
+
 export function Board() {
   const queryClient = useQueryClient()
-  const input = { projectId: PROJECT_ID }
-  const board = useQuery(trpc.board.queryOptions(input))
+  const board = useQuery(trpc.board.queryOptions(QUERY_INPUT))
   const [error, setError] = useState<string | null>(null)
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: trpc.board.queryKey(input) })
+    await queryClient.invalidateQueries({ queryKey: trpc.board.queryKey(QUERY_INPUT) })
   }
 
   const assign = useMutation(

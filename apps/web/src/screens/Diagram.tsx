@@ -60,10 +60,12 @@ function fallbackPosition(index: number) {
   return { x: 60 + (index % 4) * 240, y: 60 + Math.floor(index / 4) * 150 }
 }
 
+/** 질의 입력. 컴포넌트 밖에 두어 매 렌더 새 객체가 되지 않게 한다. */
+const QUERY_INPUT = { projectId: PROJECT_ID }
+
 export function Diagram() {
   const queryClient = useQueryClient()
-  const input = { projectId: PROJECT_ID }
-  const diagram = useQuery(trpc.diagram.queryOptions(input))
+  const diagram = useQuery(trpc.diagram.queryOptions(QUERY_INPUT))
   const data = diagram.data as DiagramData | undefined
 
   const [nodes, setNodes] = useState<Node[]>([])
@@ -72,8 +74,8 @@ export function Diagram() {
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: trpc.diagram.queryKey(input) })
-  }, [queryClient, input])
+    await queryClient.invalidateQueries({ queryKey: trpc.diagram.queryKey(QUERY_INPUT) })
+  }, [queryClient])
 
   const onError = (e: unknown) => {
     setError(e instanceof Error ? e.message : String(e))
